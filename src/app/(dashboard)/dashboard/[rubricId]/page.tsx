@@ -13,18 +13,21 @@ import {
   getSkillTrends,
   getTopBottomPerformers,
   getDistributionTrend,
+  getSkillPeriodMatrix,
+  getSubScorePeriodMatrix,
+  getGoalAttainment,
 } from "@/lib/queries/steps";
 import { getPeopleByRubric } from "@/lib/queries/people";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { StatsCards } from "@/components/charts/stats-cards";
 import { StepDistributionChart } from "@/components/charts/step-distribution-chart";
-import { PercentileBandsChart } from "@/components/charts/percentile-bands-chart";
 import { SubScoreBarChart } from "@/components/charts/sub-score-bar-chart";
 import { SkillRadarPopulation } from "@/components/charts/skill-radar-population";
 import { GroupComparisonChart } from "@/components/charts/group-comparison-chart";
 import { TopBottomChart } from "@/components/charts/top-bottom-chart";
 import { PersonTable } from "@/components/people/person-table";
+import { TrendsView } from "@/components/dashboard/trends-view";
 import type { DashboardFilters } from "@/lib/types";
 
 export default async function RubricDashboardPage({
@@ -46,20 +49,37 @@ export default async function RubricDashboardPage({
     dateTo: sp.to,
   };
 
-  const [groups, stats, distribution, percentiles, subScoreAvgs, skillAvgs, groupTrends, skillTrends, topBottom, people, distributionTrend] =
-    await Promise.all([
-      getGroups(),
-      getAggregateStats(rubricId, filters),
-      getStepDistribution(rubricId, filters),
-      getPercentileBands(rubricId, filters),
-      getSubScoreAverages(rubricId, filters),
-      getSkillAverages(rubricId, filters),
-      getGroupTrends(rubricId, filters),
-      getSkillTrends(rubricId, filters),
-      getTopBottomPerformers(rubricId, filters),
-      getPeopleByRubric(rubricId, filters),
-      getDistributionTrend(rubricId, filters),
-    ]);
+  const [
+    groups,
+    stats,
+    distribution,
+    percentiles,
+    subScoreAvgs,
+    skillAvgs,
+    groupTrends,
+    skillTrends,
+    topBottom,
+    people,
+    distributionTrend,
+    skillMatrix,
+    subScoreMatrix,
+    goalAttainment,
+  ] = await Promise.all([
+    getGroups(),
+    getAggregateStats(rubricId, filters),
+    getStepDistribution(rubricId, filters),
+    getPercentileBands(rubricId, filters),
+    getSubScoreAverages(rubricId, filters),
+    getSkillAverages(rubricId, filters),
+    getGroupTrends(rubricId, filters),
+    getSkillTrends(rubricId, filters),
+    getTopBottomPerformers(rubricId, filters),
+    getPeopleByRubric(rubricId, filters),
+    getDistributionTrend(rubricId, filters),
+    getSkillPeriodMatrix(rubricId, filters),
+    getSubScorePeriodMatrix(rubricId, filters),
+    getGoalAttainment(rubricId, filters),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -79,8 +99,8 @@ export default async function RubricDashboardPage({
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="distribution">Distribution</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="distribution">Distribution</TabsTrigger>
           <TabsTrigger value="groups">Groups</TabsTrigger>
           <TabsTrigger value="people">People ({people.length})</TabsTrigger>
         </TabsList>
@@ -93,12 +113,17 @@ export default async function RubricDashboardPage({
           <SubScoreBarChart data={subScoreAvgs} />
         </TabsContent>
 
-        <TabsContent value="distribution">
-          <StepDistributionChart data={distribution} distributionTrend={distributionTrend} />
+        <TabsContent value="trends">
+          <TrendsView
+            percentiles={percentiles}
+            skillMatrix={skillMatrix}
+            subScoreMatrix={subScoreMatrix}
+            goalAttainment={goalAttainment}
+          />
         </TabsContent>
 
-        <TabsContent value="trends">
-          <PercentileBandsChart data={percentiles} />
+        <TabsContent value="distribution">
+          <StepDistributionChart data={distribution} distributionTrend={distributionTrend} />
         </TabsContent>
 
         <TabsContent value="groups">

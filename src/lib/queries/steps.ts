@@ -5,6 +5,9 @@ import type {
   PercentileBandPoint,
   DistributionBucket,
   SubScoreAverage,
+  SkillPeriodRow,
+  SubScorePeriodRow,
+  GoalAttainmentRow,
 } from "@/lib/types";
 
 function buildWhereClause(rubricId: string, filters: DashboardFilters) {
@@ -446,4 +449,143 @@ export async function getDistributionTrend(
     stdDev: Math.round(Number(row.stddev) * 10) / 10,
     count: Number(row.count),
   }));
+}
+
+// --- Trend matrix queries ---
+
+export async function getSkillPeriodMatrix(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<SkillPeriodRow[]> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const result = await prisma.$queryRawUnsafe<
+    { skill_name: string; assessed_at: Date; average: number; count: bigint }[]
+  >(`
+    SELECT
+      sk.name as skill_name,
+      s."assessedAt" as assessed_at,
+      AVG(s.value) as average,
+      COUNT(DISTINCT s."personId") as count
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where}
+    GROUP BY sk.name, s."assessedAt"
+    ORDER BY sk.name, s."assessedAt"
+  `);
+
+  const bySkill: Record<string, { date: string; average: number; count: number }[]> = {};
+  for (const row of result) {
+    if (!bySkill[row.skill_name]) bySkill[row.skill_name] = [];
+    bySkill[row.skill_name].push({
+      date: row.assessed_at.toISOString().split("T")[0],
+      average: Math.round(Number(row.average) * 10) / 10,
+      count: Number(row.count),
+    });
+  }
+
+  return Object.entries(bySkill).map(([skillName, periods]) => ({ skillName, periods }));
+}
+
+export async function getSubScorePeriodMatrix(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<SubScorePeriodRow[]> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const result = await prisma.$queryRawUnsafe<
+    { skill_name: string; sub_score_name: string; assessed_at: Date; average: number }[]
+  >(`
+    SELECT
+      sk.name as skill_name,
+      ss.name as sub_score_name,
+      s."assessedAt" as assessed_at,
+      AVG(s.value) as average
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where}
+    GROUP BY sk.name, ss.name, s."assessedAt"
+    ORDER BY sk.name, ss.name, s."assessedAt"
+  `);
+
+  const byKey: Record<string, { date: string; average: number }[]> = {};
+  const keyMeta: Record<string, { skillName: string; subScoreName: string }> = {};
+  for (const row of result) {
+    const key = `${row.skill_name}::${row.sub_score_name}`;
+    if (!byKey[key]) {
+      byKey[key] = [];
+      keyMeta[key] = { skillName: row.skill_name, subScoreName: row.sub_score_name };
+    }
+    byKey[key].push({
+      date: row.assessed_at.toISOString().split("T")[0],
+      average: Math.round(Number(row.average) * 10) / 10,
+    });
+  }
+
+  return Object.entries(byKey).map(([key, periods]) => ({
+    ...keyMeta[key],
+    periods,
+  }));
+}
+
+export async function getGoalAttainment(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<GoalAttainmentRow[]> {
+  const groupFilter =
+    filters.groupIds && filters.groupIds.length > 0
+      ? `AND p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})`
+      : "";
+
+  const result = await prisma.$queryRawUnsafe<
+    {
+      assessed_at: Date;
+      total: bigint;
+      above_50: bigint;
+      above_60: bigint;
+      above_70: bigint;
+      above_80: bigint;
+      above_90: bigint;
+    }[]
+  >(`
+    WITH person_period_avgs AS (
+      SELECT s."personId", s."assessedAt", AVG(s.value) as avg_step
+      FROM "Step" s
+      JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+      JOIN "Person" p ON s."personId" = p.id
+      WHERE rs."rubricId" = '${rubricId}' ${groupFilter}
+      GROUP BY s."personId", s."assessedAt"
+    )
+    SELECT
+      "assessedAt" as assessed_at,
+      COUNT(*) as total,
+      COUNT(CASE WHEN avg_step >= 50 THEN 1 END) as above_50,
+      COUNT(CASE WHEN avg_step >= 60 THEN 1 END) as above_60,
+      COUNT(CASE WHEN avg_step >= 70 THEN 1 END) as above_70,
+      COUNT(CASE WHEN avg_step >= 80 THEN 1 END) as above_80,
+      COUNT(CASE WHEN avg_step >= 90 THEN 1 END) as above_90
+    FROM person_period_avgs
+    GROUP BY "assessedAt"
+    ORDER BY "assessedAt"
+  `);
+
+  return result.map((row) => {
+    const d = row.assessed_at;
+    return {
+      date: d.toISOString().split("T")[0],
+      label: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      total: Number(row.total),
+      above50: Number(row.above_50),
+      above60: Number(row.above_60),
+      above70: Number(row.above_70),
+      above80: Number(row.above_80),
+      above90: Number(row.above_90),
+    };
+  });
 }

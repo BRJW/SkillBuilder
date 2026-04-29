@@ -54,3 +54,25 @@ export interface SubScoreAverage {
   skillName: string;
   average: number;
 }
+
+export interface SkillPeriodRow {
+  skillName: string;
+  periods: { date: string; average: number; count: number }[];
+}
+
+export interface SubScorePeriodRow {
+  skillName: string;
+  subScoreName: string;
+  periods: { date: string; average: number }[];
+}
+
+export interface GoalAttainmentRow {
+  date: string;
+  label: string;
+  total: number;
+  above50: number;
+  above60: number;
+  above70: number;
+  above80: number;
+  above90: number;
+}
