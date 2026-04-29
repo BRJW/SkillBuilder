@@ -41,7 +41,7 @@ export async function resolveRubricGoals(rubricId: string): Promise<import("@/li
   });
   if (!rubric) throw new Error("Rubric not found");
 
-  const rubricGoal = rubric.goalScore;
+  const rubricGoal = rubric.goalScore ?? 70;
   const subScoreGoals: Record<string, number> = {};
   const skillSubScoreGoals: Record<string, number[]> = {};
 
