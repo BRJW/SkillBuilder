@@ -11,6 +11,11 @@ import {
   YAxis,
   Cell,
   ReferenceLine,
+  Radar,
+  RadarChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
 } from "recharts";
 import {
   ChartContainer,
@@ -96,6 +101,52 @@ function TrendArrow({ change }: { change: number }) {
 
 // --- Sub-components ---
 
+function SkillSubScoreRadar({
+  subScores,
+  color,
+  size = 180,
+}: {
+  subScores: SubScoreAverage[];
+  color: string;
+  size?: number;
+}) {
+  if (subScores.length < 3) return null;
+
+  const radarData = subScores.map((ss) => ({
+    name: ss.subScoreName.length > 14 ? ss.subScoreName.slice(0, 12) + "…" : ss.subScoreName,
+    fullName: ss.subScoreName,
+    value: ss.average,
+    fullMark: 100,
+  }));
+
+  const config = { value: { label: "Average", color } };
+
+  return (
+    <ChartContainer config={config} className="w-full" style={{ height: size }}>
+      <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="68%">
+        <defs>
+          <linearGradient id={`radarFill-${color.replace(/[^a-z0-9]/gi, "")}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.08} />
+          </linearGradient>
+        </defs>
+        <PolarGrid stroke="hsl(0, 0%, 80%)" strokeDasharray="3 3" />
+        <PolarAngleAxis dataKey="name" tick={{ fontSize: 9, fill: "hsl(0, 0%, 45%)" }} />
+        <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+        <ChartTooltip content={<ChartTooltipContent formatter={(value, _name, item) => <span>{item.payload.fullName}: {Number(value).toFixed(1)}</span>} />} />
+        <Radar
+          name="Average"
+          dataKey="value"
+          stroke={color}
+          strokeWidth={2}
+          fill={`url(#radarFill-${color.replace(/[^a-z0-9]/gi, "")})`}
+          dot={{ r: 3, fill: color, strokeWidth: 0 }}
+        />
+      </RadarChart>
+    </ChartContainer>
+  );
+}
+
 function Histogram({ data, goalThreshold, height = 200 }: { data: DistributionBucket[]; goalThreshold: number; height?: number }) {
   const config = { count: { label: "Count", color: "hsl(210, 70%, 55%)" } };
 
@@ -134,9 +185,10 @@ function SkillCards({
 }) {
   const trendMap = new Map(skillTrends.map((t) => [t.skillName, t.change]));
   const distMap = new Map(bySkill.map((d) => [d.key, d]));
-  const subScoreCountMap: Record<string, number> = {};
+  const subScoresBySkill: Record<string, SubScoreAverage[]> = {};
   for (const ss of subScoreAvgs) {
-    subScoreCountMap[ss.skillName] = (subScoreCountMap[ss.skillName] || 0) + 1;
+    if (!subScoresBySkill[ss.skillName]) subScoresBySkill[ss.skillName] = [];
+    subScoresBySkill[ss.skillName].push(ss);
   }
 
   return (
@@ -147,7 +199,7 @@ function SkillCards({
         const dist = distMap.get(skill.skillName);
         const goalForSkill = goals.skillGoals[skill.skillName] ?? goals.rubricGoal;
         const pctMeeting = dist?.stats.pctMeetingGoal ?? 0;
-        const ssCount = subScoreCountMap[skill.skillName] ?? 0;
+        const skillSubScores = subScoresBySkill[skill.skillName] ?? [];
 
         return (
           <motion.div
@@ -160,19 +212,24 @@ function SkillCards({
               className="cursor-pointer hover:shadow-lg hover:ring-1 hover:ring-primary/30 transition-all"
               onClick={() => onSelect(skill.skillName)}
             >
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
+              <CardHeader className="pb-0 pt-4 px-5">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                    <span className="font-semibold text-sm">{skill.skillName}</span>
+                    <CardTitle className="text-sm">{skill.skillName}</CardTitle>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
+              </CardHeader>
+              <CardContent className="px-2 pb-2">
+                {/* Mini radar */}
+                <SkillSubScoreRadar subScores={skillSubScores} color={color} size={200} />
 
-                <div className="mt-3 flex items-end justify-between">
+                {/* Stats row */}
+                <div className="flex items-center justify-between px-3 pb-2">
                   <div>
-                    <p className="text-3xl font-bold tracking-tight">{skill.average.toFixed(1)}</p>
-                    <div className="flex items-center gap-1.5 mt-1">
+                    <p className="text-2xl font-bold tracking-tight">{skill.average.toFixed(1)}</p>
+                    <div className="flex items-center gap-1.5">
                       <TrendArrow change={change} />
                       <span className={`text-xs font-medium ${Math.abs(change) < 0.3 ? "text-muted-foreground" : change > 0 ? "text-emerald-600" : "text-red-500"}`}>
                         {change > 0 ? "+" : ""}{change.toFixed(1)}
@@ -183,7 +240,7 @@ function SkillCards({
                     <Badge variant={pctMeeting >= 50 ? "default" : "outline"} className="text-xs">
                       {pctMeeting.toFixed(0)}% ≥{goalForSkill.toFixed(0)}
                     </Badge>
-                    <p className="text-xs text-muted-foreground">{ssCount} sub-scores</p>
+                    <p className="text-xs text-muted-foreground">{skillSubScores.length} sub-scores</p>
                   </div>
                 </div>
               </CardContent>
@@ -443,17 +500,20 @@ export function SkillsView({
             transition={{ duration: 0.25 }}
             className="space-y-6"
           >
-            {/* Radar + Skill Cards */}
+            {/* Overall radar + Per-skill radar cards */}
             <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
               <SkillRadarPopulation data={skillAvgs} trends={skillTrends} />
-              <SkillCards
-                skillAvgs={skillAvgs}
-                skillTrends={skillTrends}
-                bySkill={bySkill}
-                goals={goals}
-                subScoreAvgs={subScoreAvgs}
-                onSelect={handleSelect}
-              />
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Per-Skill Profiles</h3>
+                <SkillCards
+                  skillAvgs={skillAvgs}
+                  skillTrends={skillTrends}
+                  bySkill={bySkill}
+                  goals={goals}
+                  subScoreAvgs={subScoreAvgs}
+                  onSelect={handleSelect}
+                />
+              </div>
             </div>
 
             {/* All sub-scores bar chart */}
@@ -555,6 +615,19 @@ export function SkillsView({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Large radar for the selected skill */}
+            {selectedSubScores.length >= 3 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Sub-Score Profile</CardTitle>
+                  <CardDescription>Radar view of {selectedSubScores.length} sub-scores within {selectedSkill}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SkillSubScoreRadar subScores={selectedSubScores} color={selectedColor} size={350} />
+                </CardContent>
+              </Card>
+            )}
 
             {/* Sub-score distributions */}
             {drillLoading ? (
