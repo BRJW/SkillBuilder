@@ -76,3 +76,20 @@ export interface GoalAttainmentRow {
   above80: number;
   above90: number;
 }
+
+export interface ScopedDistribution {
+  key: string;
+  buckets: DistributionBucket[];
+  stats: {
+    mean: number;
+    median: number;
+    stdDev: number;
+    p25: number;
+    p75: number;
+    count: number;
+    pctAbove50: number;
+    pctAbove60: number;
+    pctAbove70: number;
+    pctAbove80: number;
+  };
+}

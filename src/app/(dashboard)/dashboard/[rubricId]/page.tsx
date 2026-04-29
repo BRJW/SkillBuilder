@@ -16,12 +16,15 @@ import {
   getSkillPeriodMatrix,
   getSubScorePeriodMatrix,
   getGoalAttainment,
+  getDistributionBySkill,
+  getDistributionByGroup,
+  getDistributionByPeriod,
 } from "@/lib/queries/steps";
 import { getPeopleByRubric } from "@/lib/queries/people";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { StatsCards } from "@/components/charts/stats-cards";
-import { StepDistributionChart } from "@/components/charts/step-distribution-chart";
+import { DistributionView } from "@/components/dashboard/distribution-view";
 import { SubScoreBarChart } from "@/components/charts/sub-score-bar-chart";
 import { SkillRadarPopulation } from "@/components/charts/skill-radar-population";
 import { GroupComparisonChart } from "@/components/charts/group-comparison-chart";
@@ -64,6 +67,9 @@ export default async function RubricDashboardPage({
     skillMatrix,
     subScoreMatrix,
     goalAttainment,
+    distBySkill,
+    distByGroup,
+    distByPeriod,
   ] = await Promise.all([
     getGroups(),
     getAggregateStats(rubricId, filters),
@@ -79,6 +85,9 @@ export default async function RubricDashboardPage({
     getSkillPeriodMatrix(rubricId, filters),
     getSubScorePeriodMatrix(rubricId, filters),
     getGoalAttainment(rubricId, filters),
+    getDistributionBySkill(rubricId, filters),
+    getDistributionByGroup(rubricId, filters),
+    getDistributionByPeriod(rubricId, filters),
   ]);
 
   return (
@@ -123,7 +132,13 @@ export default async function RubricDashboardPage({
         </TabsContent>
 
         <TabsContent value="distribution">
-          <StepDistributionChart data={distribution} distributionTrend={distributionTrend} />
+          <DistributionView
+            overall={distribution}
+            distributionTrend={distributionTrend}
+            bySkill={distBySkill}
+            byGroup={distByGroup}
+            byPeriod={distByPeriod}
+          />
         </TabsContent>
 
         <TabsContent value="groups">
