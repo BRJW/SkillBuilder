@@ -11,9 +11,9 @@ function buildWhereClause(rubricId: string, filters: DashboardFilters) {
   const conditions: string[] = [
     `rs."rubricId" = '${rubricId}'`,
   ];
-  if (filters.schoolIds && filters.schoolIds.length > 0) {
-    const ids = filters.schoolIds.map((id) => `'${id}'`).join(",");
-    conditions.push(`p."schoolId" IN (${ids})`);
+  if (filters.groupIds && filters.groupIds.length > 0) {
+    const ids = filters.groupIds.map((id) => `'${id}'`).join(",");
+    conditions.push(`p."groupId" IN (${ids})`);
   }
   if (filters.dateFrom) {
     conditions.push(`s."assessedAt" >= '${filters.dateFrom}'`);
@@ -30,7 +30,6 @@ export async function getAggregateStats(
 ): Promise<RubricStats> {
   const where = buildWhereClause(rubricId, filters);
 
-  // Get per-person average scores, then compute percentiles
   const result = await prisma.$queryRawUnsafe<
     {
       total_people: bigint;
@@ -54,7 +53,7 @@ export async function getAggregateStats(
     total AS (
       SELECT COUNT(DISTINCT p.id) as total_people
       FROM "Person" p
-      ${filters.schoolIds && filters.schoolIds.length > 0 ? `WHERE p."schoolId" IN (${filters.schoolIds.map((id) => `'${id}'`).join(",")})` : ""}
+      ${filters.groupIds && filters.groupIds.length > 0 ? `WHERE p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})` : ""}
     )
     SELECT
       t.total_people,
@@ -119,21 +118,21 @@ export async function getScoreDistribution(
       GROUP BY s."personId"
     )
     SELECT
-      FLOOR(avg_score / 10) * 10 as bucket,
+      FLOOR(avg_score / 5) * 5 as bucket,
       COUNT(*) as count
     FROM person_avgs
     GROUP BY bucket
     ORDER BY bucket
   `);
 
-  // Build complete 0-100 range
+  // Build complete 0-100 range in 5-point buckets for higher fidelity
   const buckets: DistributionBucket[] = [];
-  for (let i = 0; i <= 90; i += 10) {
+  for (let i = 0; i <= 95; i += 5) {
     const found = result.find((r) => Number(r.bucket) === i);
     buckets.push({
       rangeStart: i,
-      rangeEnd: i + 10,
-      label: `${i}-${i + 10}`,
+      rangeEnd: i + 5,
+      label: `${i}`,
       count: found ? Number(found.count) : 0,
     });
   }
@@ -144,9 +143,9 @@ export async function getPercentileBands(
   rubricId: string,
   filters: DashboardFilters
 ): Promise<PercentileBandPoint[]> {
-  const schoolFilter =
-    filters.schoolIds && filters.schoolIds.length > 0
-      ? `AND p."schoolId" IN (${filters.schoolIds.map((id) => `'${id}'`).join(",")})`
+  const groupFilter =
+    filters.groupIds && filters.groupIds.length > 0
+      ? `AND p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})`
       : "";
 
   const result = await prisma.$queryRawUnsafe<
@@ -164,7 +163,7 @@ export async function getPercentileBands(
       FROM "Score" s
       JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
       JOIN "Person" p ON s."personId" = p.id
-      WHERE rs."rubricId" = '${rubricId}' ${schoolFilter}
+      WHERE rs."rubricId" = '${rubricId}' ${groupFilter}
       GROUP BY s."personId", s."assessedAt"
     )
     SELECT
@@ -224,4 +223,100 @@ export async function getSubScoreAverages(
     skillName: row.skill_name,
     average: Math.round(row.average * 10) / 10,
   }));
+}
+
+export async function getSkillAverages(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<{ skillName: string; average: number }[]> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const result = await prisma.$queryRawUnsafe<
+    { skill_name: string; average: number }[]
+  >(`
+    SELECT
+      sk.name as skill_name,
+      AVG(s.value) as average
+    FROM "Score" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where}
+    GROUP BY sk.name
+    ORDER BY sk.name
+  `);
+
+  return result.map((row) => ({
+    skillName: row.skill_name,
+    average: Math.round(row.average * 10) / 10,
+  }));
+}
+
+export async function getGroupComparison(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<{ groupName: string; average: number; count: number }[]> {
+  const dateFilter = [
+    filters.dateFrom ? `AND s."assessedAt" >= '${filters.dateFrom}'` : "",
+    filters.dateTo ? `AND s."assessedAt" <= '${filters.dateTo}'` : "",
+  ].join(" ");
+
+  const result = await prisma.$queryRawUnsafe<
+    { group_name: string; average: number; count: bigint }[]
+  >(`
+    SELECT
+      g.name as group_name,
+      AVG(s.value) as average,
+      COUNT(DISTINCT s."personId") as count
+    FROM "Score" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "Person" p ON s."personId" = p.id
+    JOIN "Group" g ON p."groupId" = g.id
+    WHERE rs."rubricId" = '${rubricId}' ${dateFilter}
+    GROUP BY g.name
+    ORDER BY average DESC
+  `);
+
+  return result.map((row) => ({
+    groupName: row.group_name,
+    average: Math.round(row.average * 10) / 10,
+    count: Number(row.count),
+  }));
+}
+
+export async function getTopBottomPerformers(
+  rubricId: string,
+  filters: DashboardFilters,
+  limit: number = 5
+): Promise<{ top: { name: string; groupName: string; avg: number }[]; bottom: { name: string; groupName: string; avg: number }[] }> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const result = await prisma.$queryRawUnsafe<
+    { first_name: string; last_name: string; group_name: string; avg_score: number }[]
+  >(`
+    SELECT
+      p."firstName" as first_name,
+      p."lastName" as last_name,
+      g.name as group_name,
+      AVG(s.value) as avg_score
+    FROM "Score" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "Person" p ON s."personId" = p.id
+    JOIN "Group" g ON p."groupId" = g.id
+    WHERE ${where}
+    GROUP BY p.id, p."firstName", p."lastName", g.name
+    ORDER BY avg_score DESC
+  `);
+
+  const mapped = result.map((r) => ({
+    name: `${r.first_name} ${r.last_name}`,
+    groupName: r.group_name,
+    avg: Math.round(r.avg_score * 10) / 10,
+  }));
+
+  return {
+    top: mapped.slice(0, limit),
+    bottom: mapped.slice(-limit).reverse(),
+  };
 }

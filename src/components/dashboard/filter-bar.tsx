@@ -11,16 +11,19 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
-interface School {
+interface Group {
   id: string;
   name: string;
   district: string | null;
 }
 
-export function FilterBar({ schools }: { schools: School[] }) {
+export function FilterBar({ groups }: { groups: Group[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const currentGroupId = searchParams.get("group") || "all";
+  const currentGroup = groups.find((g) => g.id === currentGroupId);
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -38,19 +41,21 @@ export function FilterBar({ schools }: { schools: School[] }) {
   return (
     <div className="flex flex-wrap items-end gap-4">
       <div className="space-y-1.5">
-        <Label className="text-xs">School</Label>
+        <Label className="text-xs text-muted-foreground">Group</Label>
         <Select
-          value={searchParams.get("school") || "all"}
-          onValueChange={(v) => updateParam("school", v ?? "all")}
+          value={currentGroupId}
+          onValueChange={(v) => updateParam("group", v ?? "all")}
         >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="All Schools" />
+          <SelectTrigger className="w-[220px]">
+            <SelectValue>
+              {currentGroup ? currentGroup.name : "All Groups"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Schools</SelectItem>
-            {schools.map((school) => (
-              <SelectItem key={school.id} value={school.id}>
-                {school.name}
+            <SelectItem value="all">All Groups</SelectItem>
+            {groups.map((group) => (
+              <SelectItem key={group.id} value={group.id}>
+                {group.name}
               </SelectItem>
             ))}
           </SelectContent>

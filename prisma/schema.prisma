@@ -16,7 +16,7 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
-model School {
+model Group {
   id        String   @id @default(cuid())
   name      String
   district  String?
@@ -30,13 +30,13 @@ model Person {
   firstName String
   lastName  String
   email     String?
-  schoolId  String
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   scores    Score[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([schoolId])
+  @@index([groupId])
 }
 
 model Skill {

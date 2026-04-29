@@ -1,14 +1,16 @@
 export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import { getRubricById } from "@/lib/queries/rubrics";
-import { getSchools } from "@/lib/queries/schools";
+import { getGroups } from "@/lib/queries/groups";
 import {
   getAggregateStats,
   getScoreDistribution,
   getPercentileBands,
   getSubScoreAverages,
+  getSkillAverages,
+  getGroupComparison,
+  getTopBottomPerformers,
 } from "@/lib/queries/scores";
 import { getPeopleByRubric } from "@/lib/queries/people";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,8 +19,10 @@ import { StatsCards } from "@/components/charts/stats-cards";
 import { ScoreDistributionChart } from "@/components/charts/score-distribution-chart";
 import { PercentileBandsChart } from "@/components/charts/percentile-bands-chart";
 import { SubScoreBarChart } from "@/components/charts/sub-score-bar-chart";
+import { SkillRadarPopulation } from "@/components/charts/skill-radar-population";
+import { GroupComparisonChart } from "@/components/charts/group-comparison-chart";
+import { TopBottomChart } from "@/components/charts/top-bottom-chart";
 import { PersonTable } from "@/components/people/person-table";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { DashboardFilters } from "@/lib/types";
 
 export default async function RubricDashboardPage({
@@ -26,7 +30,7 @@ export default async function RubricDashboardPage({
   searchParams,
 }: {
   params: Promise<{ rubricId: string }>;
-  searchParams: Promise<{ school?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ group?: string; from?: string; to?: string }>;
 }) {
   const { rubricId } = await params;
   const sp = await searchParams;
@@ -35,18 +39,21 @@ export default async function RubricDashboardPage({
   if (!rubric) notFound();
 
   const filters: DashboardFilters = {
-    schoolIds: sp.school ? [sp.school] : undefined,
+    groupIds: sp.group ? [sp.group] : undefined,
     dateFrom: sp.from,
     dateTo: sp.to,
   };
 
-  const [schools, stats, distribution, percentiles, subScoreAvgs, people] =
+  const [groups, stats, distribution, percentiles, subScoreAvgs, skillAvgs, groupComparison, topBottom, people] =
     await Promise.all([
-      getSchools(),
+      getGroups(),
       getAggregateStats(rubricId, filters),
       getScoreDistribution(rubricId, filters),
       getPercentileBands(rubricId, filters),
       getSubScoreAverages(rubricId, filters),
+      getSkillAverages(rubricId, filters),
+      getGroupComparison(rubricId, filters),
+      getTopBottomPerformers(rubricId, filters),
       getPeopleByRubric(rubricId, filters),
     ]);
 
@@ -61,7 +68,7 @@ export default async function RubricDashboardPage({
         )}
       </div>
 
-      <FilterBar schools={schools} />
+      <FilterBar groups={groups} />
 
       <StatsCards stats={stats} />
 
@@ -70,10 +77,15 @@ export default async function RubricDashboardPage({
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="distribution">Distribution</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="groups">Groups</TabsTrigger>
           <TabsTrigger value="people">People ({people.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SkillRadarPopulation data={skillAvgs} />
+            <TopBottomChart top={topBottom.top} bottom={topBottom.bottom} />
+          </div>
           <SubScoreBarChart data={subScoreAvgs} />
         </TabsContent>
 
@@ -83,6 +95,10 @@ export default async function RubricDashboardPage({
 
         <TabsContent value="trends">
           <PercentileBandsChart data={percentiles} />
+        </TabsContent>
+
+        <TabsContent value="groups">
+          <GroupComparisonChart data={groupComparison} />
         </TabsContent>
 
         <TabsContent value="people">

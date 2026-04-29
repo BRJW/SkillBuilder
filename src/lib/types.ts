@@ -1,5 +1,5 @@
 export interface DashboardFilters {
-  schoolIds?: string[];
+  groupIds?: string[];
   dateFrom?: string;
   dateTo?: string;
 }
@@ -36,7 +36,7 @@ export interface PersonWithScore {
   id: string;
   firstName: string;
   lastName: string;
-  schoolName: string;
+  groupName: string;
   averageScore: number;
   scoreCount: number;
 }

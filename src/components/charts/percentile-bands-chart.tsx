@@ -1,37 +1,20 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Line, ComposedChart } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
 } from "@/components/ui/chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PercentileBandPoint } from "@/lib/types";
 
 const chartConfig = {
-  p90: {
-    label: "90th Percentile",
-    color: "hsl(210, 70%, 75%)",
-  },
-  p75: {
-    label: "75th Percentile",
-    color: "hsl(210, 70%, 60%)",
-  },
-  p50: {
-    label: "Median",
-    color: "hsl(210, 70%, 45%)",
-  },
-  p25: {
-    label: "25th Percentile",
-    color: "hsl(210, 70%, 60%)",
-  },
-  p10: {
-    label: "10th Percentile",
-    color: "hsl(210, 70%, 75%)",
-  },
+  p90: { label: "90th Percentile", color: "hsl(210, 70%, 80%)" },
+  p75: { label: "75th Percentile", color: "hsl(210, 70%, 65%)" },
+  p50: { label: "Median", color: "hsl(210, 80%, 50%)" },
+  p25: { label: "25th Percentile", color: "hsl(210, 70%, 65%)" },
+  p10: { label: "10th Percentile", color: "hsl(210, 70%, 80%)" },
 };
 
 export function PercentileBandsChart({
@@ -39,7 +22,6 @@ export function PercentileBandsChart({
 }: {
   data: PercentileBandPoint[];
 }) {
-  // Format dates for display
   const formatted = data.map((d) => ({
     ...d,
     label: new Date(d.assessedAt).toLocaleDateString("en-US", {
@@ -48,70 +30,46 @@ export function PercentileBandsChart({
     }),
   }));
 
+  const growth = data.length >= 2
+    ? (data[data.length - 1].p50 - data[0].p50).toFixed(1)
+    : null;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Percentile Bands Over Time</CardTitle>
+        <CardDescription>
+          Shows how scores spread across percentiles each assessment period
+          {growth && <span className="ml-1 font-medium text-emerald-600">(Median {Number(growth) >= 0 ? "+" : ""}{growth} pts)</span>}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[350px] w-full">
-          <AreaChart data={formatted} accessibilityLayer>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-            />
-            <YAxis
-              domain={[0, 100]}
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-            />
+        <ChartContainer config={chartConfig} className="h-[380px] w-full">
+          <ComposedChart data={formatted} accessibilityLayer>
+            <defs>
+              <linearGradient id="bandOuter" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(210, 70%, 65%)" stopOpacity={0.15} />
+                <stop offset="100%" stopColor="hsl(210, 70%, 65%)" stopOpacity={0.05} />
+              </linearGradient>
+              <linearGradient id="bandInner" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(210, 70%, 55%)" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="hsl(210, 70%, 55%)" stopOpacity={0.1} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} fontSize={12} />
+            <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <ChartLegend content={<ChartLegendContent />} />
-            <Area
-              type="monotone"
-              dataKey="p90"
-              stackId="band"
-              stroke="var(--color-p90)"
-              fill="var(--color-p90)"
-              fillOpacity={0.2}
-            />
-            <Area
-              type="monotone"
-              dataKey="p75"
-              stackId="band2"
-              stroke="var(--color-p75)"
-              fill="var(--color-p75)"
-              fillOpacity={0.3}
-            />
-            <Area
-              type="monotone"
-              dataKey="p50"
-              stackId="band3"
-              stroke="var(--color-p50)"
-              fill="var(--color-p50)"
-              fillOpacity={0.4}
-            />
-            <Area
-              type="monotone"
-              dataKey="p25"
-              stackId="band4"
-              stroke="var(--color-p25)"
-              fill="var(--color-p25)"
-              fillOpacity={0.3}
-            />
-            <Area
-              type="monotone"
-              dataKey="p10"
-              stackId="band5"
-              stroke="var(--color-p10)"
-              fill="var(--color-p10)"
-              fillOpacity={0.2}
-            />
-          </AreaChart>
+            <Area type="monotone" dataKey="p90" stroke="none" fill="url(#bandOuter)" />
+            <Area type="monotone" dataKey="p75" stroke="none" fill="url(#bandInner)" />
+            <Area type="monotone" dataKey="p25" stroke="none" fill="url(#bandInner)" />
+            <Area type="monotone" dataKey="p10" stroke="none" fill="url(#bandOuter)" />
+            <Line type="monotone" dataKey="p90" stroke="hsl(210, 60%, 75%)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+            <Line type="monotone" dataKey="p75" stroke="hsl(210, 65%, 60%)" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="p50" stroke="hsl(210, 80%, 45%)" strokeWidth={3} dot={{ r: 4, fill: "hsl(210, 80%, 45%)" }} />
+            <Line type="monotone" dataKey="p25" stroke="hsl(210, 65%, 60%)" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="p10" stroke="hsl(210, 60%, 75%)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+          </ComposedChart>
         </ChartContainer>
       </CardContent>
     </Card>

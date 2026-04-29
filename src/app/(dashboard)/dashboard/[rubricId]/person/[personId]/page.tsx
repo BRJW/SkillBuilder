@@ -62,7 +62,7 @@ export default async function PersonDetailPage({
             {person.firstName} {person.lastName}
           </h1>
           <p className="text-muted-foreground">
-            {person.school.name} &middot; {rubric.name}
+            {person.group.name} &middot; {rubric.name}
           </p>
         </div>
         <Badge variant={overallAvg >= 70 ? "default" : "secondary"} className="text-lg px-3 py-1">

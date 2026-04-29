@@ -5,9 +5,9 @@ export async function getPeopleByRubric(
   rubricId: string,
   filters: DashboardFilters
 ): Promise<PersonWithScore[]> {
-  const schoolFilter =
-    filters.schoolIds && filters.schoolIds.length > 0
-      ? `AND p."schoolId" IN (${filters.schoolIds.map((id) => `'${id}'`).join(",")})`
+  const groupFilter =
+    filters.groupIds && filters.groupIds.length > 0
+      ? `AND p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})`
       : "";
   const dateFilter = [
     filters.dateFrom ? `AND s."assessedAt" >= '${filters.dateFrom}'` : "",
@@ -19,7 +19,7 @@ export async function getPeopleByRubric(
       id: string;
       first_name: string;
       last_name: string;
-      school_name: string;
+      group_name: string;
       average_score: number;
       score_count: bigint;
     }[]
@@ -28,15 +28,15 @@ export async function getPeopleByRubric(
       p.id,
       p."firstName" as first_name,
       p."lastName" as last_name,
-      sch.name as school_name,
+      g.name as group_name,
       AVG(s.value) as average_score,
       COUNT(s.id) as score_count
     FROM "Person" p
-    JOIN "School" sch ON p."schoolId" = sch.id
+    JOIN "Group" g ON p."groupId" = g.id
     JOIN "Score" s ON s."personId" = p.id
     JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
-    WHERE rs."rubricId" = '${rubricId}' ${schoolFilter} ${dateFilter}
-    GROUP BY p.id, p."firstName", p."lastName", sch.name
+    WHERE rs."rubricId" = '${rubricId}' ${groupFilter} ${dateFilter}
+    GROUP BY p.id, p."firstName", p."lastName", g.name
     ORDER BY average_score DESC
   `);
 
@@ -44,7 +44,7 @@ export async function getPeopleByRubric(
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
-    schoolName: row.school_name,
+    groupName: row.group_name,
     averageScore: Math.round(row.average_score * 10) / 10,
     scoreCount: Number(row.score_count),
   }));
@@ -71,7 +71,6 @@ export async function getPersonScores(
     orderBy: { assessedAt: "asc" },
   });
 
-  // Group by sub-score
   const grouped: Record<string, SubScoreDetail> = {};
   for (const score of scores) {
     const key = score.subScoreId;
@@ -98,6 +97,6 @@ export async function getPersonScores(
 export async function getPersonById(personId: string) {
   return prisma.person.findUnique({
     where: { id: personId },
-    include: { school: true },
+    include: { group: true },
   });
 }

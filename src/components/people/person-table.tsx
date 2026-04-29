@@ -31,7 +31,7 @@ export function PersonTable({
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>School</TableHead>
+            <TableHead>Group</TableHead>
             <TableHead className="text-right">Avg Score</TableHead>
             <TableHead className="text-right">Assessments</TableHead>
           </TableRow>
@@ -55,7 +55,7 @@ export function PersonTable({
                   </Link>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {person.schoolName}
+                  {person.groupName}
                 </TableCell>
                 <TableCell className="text-right">
                   <Badge variant={getScoreBadgeVariant(person.averageScore)}>

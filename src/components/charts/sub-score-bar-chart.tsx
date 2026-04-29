@@ -1,12 +1,12 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell, ReferenceLine } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SKILL_COLORS } from "@/lib/constants";
 import type { SkillName } from "@/lib/constants";
 import type { SubScoreAverage } from "@/lib/types";
@@ -22,51 +22,65 @@ export function SubScoreBarChart({ data }: { data: SubScoreAverage[] }) {
   const formatted = data.map((d) => ({
     ...d,
     label: d.subScoreName,
-    fill: SKILL_COLORS[d.skillName as SkillName] || "var(--chart-1)",
+    fill: SKILL_COLORS[d.skillName as SkillName] || "hsl(210, 60%, 55%)",
   }));
+
+  const overallAvg = data.length > 0
+    ? data.reduce((sum, d) => sum + d.average, 0) / data.length
+    : 0;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sub-Score Averages</CardTitle>
+        <CardTitle>Sub-Score Breakdown</CardTitle>
+        <CardDescription>
+          Average scores across {data.length} sub-scores (overall avg: {overallAvg.toFixed(1)})
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[400px] w-full">
+        <ChartContainer config={chartConfig} className="h-[500px] w-full">
           <BarChart
             data={formatted}
             layout="vertical"
-            margin={{ left: 120 }}
+            margin={{ left: 130, right: 20 }}
             accessibilityLayer
           >
-            <CartesianGrid horizontal={false} />
+            <CartesianGrid horizontal={false} strokeDasharray="3 3" opacity={0.3} />
             <XAxis
               type="number"
               domain={[0, 100]}
               tickLine={false}
               axisLine={false}
+              fontSize={11}
             />
             <YAxis
               type="category"
               dataKey="label"
               tickLine={false}
               axisLine={false}
-              width={110}
-              tick={{ fontSize: 12 }}
+              width={120}
+              tick={{ fontSize: 11 }}
             />
             <ChartTooltip
               content={
                 <ChartTooltipContent
                   formatter={(value, _name, item) => (
-                    <span>
-                      {item.payload.skillName}: {Number(value).toFixed(1)}
+                    <span className="font-medium">
+                      {item.payload.skillName} &middot; {Number(value).toFixed(1)}
                     </span>
                   )}
                 />
               }
             />
-            <Bar dataKey="average" radius={[0, 4, 4, 0]}>
+            <ReferenceLine
+              x={overallAvg}
+              stroke="hsl(0, 0%, 60%)"
+              strokeDasharray="4 4"
+              label={{ value: "Avg", position: "top", fontSize: 10 }}
+            />
+            <Bar dataKey="average" radius={[0, 6, 6, 0]} maxBarSize={20}>
               {formatted.map((entry, index) => (
-                <Cell key={index} fill={entry.fill} />
+                <Cell key={index} fill={entry.fill} fillOpacity={0.85} />
               ))}
             </Bar>
           </BarChart>
