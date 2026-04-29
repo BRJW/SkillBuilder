@@ -7,7 +7,7 @@ export interface DashboardFilters {
 export interface RubricStats {
   completionRate: number;
   totalPeople: number;
-  scoredPeople: number;
+  assessedPeople: number;
   mean: number;
   median: number;
   p10: number;
@@ -32,13 +32,13 @@ export interface DistributionBucket {
   count: number;
 }
 
-export interface PersonWithScore {
+export interface PersonWithSteps {
   id: string;
   firstName: string;
   lastName: string;
   groupName: string;
-  averageScore: number;
-  scoreCount: number;
+  averageStep: number;
+  stepCount: number;
 }
 
 export interface SubScoreDetail {

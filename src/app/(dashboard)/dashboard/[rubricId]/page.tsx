@@ -5,18 +5,20 @@ import { getRubricById } from "@/lib/queries/rubrics";
 import { getGroups } from "@/lib/queries/groups";
 import {
   getAggregateStats,
-  getScoreDistribution,
+  getStepDistribution,
   getPercentileBands,
   getSubScoreAverages,
   getSkillAverages,
-  getGroupComparison,
+  getGroupTrends,
+  getSkillTrends,
   getTopBottomPerformers,
-} from "@/lib/queries/scores";
+  getDistributionTrend,
+} from "@/lib/queries/steps";
 import { getPeopleByRubric } from "@/lib/queries/people";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { StatsCards } from "@/components/charts/stats-cards";
-import { ScoreDistributionChart } from "@/components/charts/score-distribution-chart";
+import { StepDistributionChart } from "@/components/charts/step-distribution-chart";
 import { PercentileBandsChart } from "@/components/charts/percentile-bands-chart";
 import { SubScoreBarChart } from "@/components/charts/sub-score-bar-chart";
 import { SkillRadarPopulation } from "@/components/charts/skill-radar-population";
@@ -44,17 +46,19 @@ export default async function RubricDashboardPage({
     dateTo: sp.to,
   };
 
-  const [groups, stats, distribution, percentiles, subScoreAvgs, skillAvgs, groupComparison, topBottom, people] =
+  const [groups, stats, distribution, percentiles, subScoreAvgs, skillAvgs, groupTrends, skillTrends, topBottom, people, distributionTrend] =
     await Promise.all([
       getGroups(),
       getAggregateStats(rubricId, filters),
-      getScoreDistribution(rubricId, filters),
+      getStepDistribution(rubricId, filters),
       getPercentileBands(rubricId, filters),
       getSubScoreAverages(rubricId, filters),
       getSkillAverages(rubricId, filters),
-      getGroupComparison(rubricId, filters),
+      getGroupTrends(rubricId, filters),
+      getSkillTrends(rubricId, filters),
       getTopBottomPerformers(rubricId, filters),
       getPeopleByRubric(rubricId, filters),
+      getDistributionTrend(rubricId, filters),
     ]);
 
   return (
@@ -83,14 +87,14 @@ export default async function RubricDashboardPage({
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <SkillRadarPopulation data={skillAvgs} />
+            <SkillRadarPopulation data={skillAvgs} trends={skillTrends} />
             <TopBottomChart top={topBottom.top} bottom={topBottom.bottom} />
           </div>
           <SubScoreBarChart data={subScoreAvgs} />
         </TabsContent>
 
         <TabsContent value="distribution">
-          <ScoreDistributionChart data={distribution} />
+          <StepDistributionChart data={distribution} distributionTrend={distributionTrend} />
         </TabsContent>
 
         <TabsContent value="trends">
@@ -98,7 +102,7 @@ export default async function RubricDashboardPage({
         </TabsContent>
 
         <TabsContent value="groups">
-          <GroupComparisonChart data={groupComparison} />
+          <GroupComparisonChart data={groupTrends} />
         </TabsContent>
 
         <TabsContent value="people">

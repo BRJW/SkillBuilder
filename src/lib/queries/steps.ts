@@ -33,7 +33,7 @@ export async function getAggregateStats(
   const result = await prisma.$queryRawUnsafe<
     {
       total_people: bigint;
-      scored_people: bigint;
+      assessed_people: bigint;
       mean: number | null;
       median: number | null;
       p10: number | null;
@@ -43,8 +43,8 @@ export async function getAggregateStats(
     }[]
   >(`
     WITH person_avgs AS (
-      SELECT s."personId", AVG(s.value) as avg_score
-      FROM "Score" s
+      SELECT s."personId", AVG(s.value) as avg_step
+      FROM "Step" s
       JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
       JOIN "Person" p ON s."personId" = p.id
       WHERE ${where}
@@ -57,13 +57,13 @@ export async function getAggregateStats(
     )
     SELECT
       t.total_people,
-      COUNT(pa."personId") as scored_people,
-      AVG(pa.avg_score) as mean,
-      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY pa.avg_score) as median,
-      PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY pa.avg_score) as p10,
-      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY pa.avg_score) as p25,
-      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY pa.avg_score) as p75,
-      PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY pa.avg_score) as p90
+      COUNT(pa."personId") as assessed_people,
+      AVG(pa.avg_step) as mean,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY pa.avg_step) as median,
+      PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY pa.avg_step) as p10,
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY pa.avg_step) as p25,
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY pa.avg_step) as p75,
+      PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY pa.avg_step) as p90
     FROM person_avgs pa
     CROSS JOIN total t
     GROUP BY t.total_people
@@ -73,7 +73,7 @@ export async function getAggregateStats(
     return {
       completionRate: 0,
       totalPeople: 0,
-      scoredPeople: 0,
+      assessedPeople: 0,
       mean: 0,
       median: 0,
       p10: 0,
@@ -85,12 +85,12 @@ export async function getAggregateStats(
 
   const row = result[0];
   const totalPeople = Number(row.total_people);
-  const scoredPeople = Number(row.scored_people);
+  const assessedPeople = Number(row.assessed_people);
 
   return {
-    completionRate: totalPeople > 0 ? (scoredPeople / totalPeople) * 100 : 0,
+    completionRate: totalPeople > 0 ? (assessedPeople / totalPeople) * 100 : 0,
     totalPeople,
-    scoredPeople,
+    assessedPeople,
     mean: Math.round((row.mean ?? 0) * 10) / 10,
     median: Math.round((row.median ?? 0) * 10) / 10,
     p10: Math.round((row.p10 ?? 0) * 10) / 10,
@@ -100,7 +100,7 @@ export async function getAggregateStats(
   };
 }
 
-export async function getScoreDistribution(
+export async function getStepDistribution(
   rubricId: string,
   filters: DashboardFilters
 ): Promise<DistributionBucket[]> {
@@ -110,22 +110,21 @@ export async function getScoreDistribution(
     { bucket: number; count: bigint }[]
   >(`
     WITH person_avgs AS (
-      SELECT s."personId", AVG(s.value) as avg_score
-      FROM "Score" s
+      SELECT s."personId", AVG(s.value) as avg_step
+      FROM "Step" s
       JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
       JOIN "Person" p ON s."personId" = p.id
       WHERE ${where}
       GROUP BY s."personId"
     )
     SELECT
-      FLOOR(avg_score / 5) * 5 as bucket,
+      FLOOR(avg_step / 5) * 5 as bucket,
       COUNT(*) as count
     FROM person_avgs
     GROUP BY bucket
     ORDER BY bucket
   `);
 
-  // Build complete 0-100 range in 5-point buckets for higher fidelity
   const buckets: DistributionBucket[] = [];
   for (let i = 0; i <= 95; i += 5) {
     const found = result.find((r) => Number(r.bucket) === i);
@@ -159,8 +158,8 @@ export async function getPercentileBands(
     }[]
   >(`
     WITH person_period_avgs AS (
-      SELECT s."personId", s."assessedAt", AVG(s.value) as avg_score
-      FROM "Score" s
+      SELECT s."personId", s."assessedAt", AVG(s.value) as avg_step
+      FROM "Step" s
       JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
       JOIN "Person" p ON s."personId" = p.id
       WHERE rs."rubricId" = '${rubricId}' ${groupFilter}
@@ -168,11 +167,11 @@ export async function getPercentileBands(
     )
     SELECT
       "assessedAt" as assessed_at,
-      PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY avg_score) as p10,
-      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY avg_score) as p25,
-      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_score) as p50,
-      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY avg_score) as p75,
-      PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY avg_score) as p90
+      PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY avg_step) as p10,
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY avg_step) as p25,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_step) as p50,
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY avg_step) as p75,
+      PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY avg_step) as p90
     FROM person_period_avgs
     GROUP BY "assessedAt"
     ORDER BY "assessedAt"
@@ -207,7 +206,7 @@ export async function getSubScoreAverages(
       ss.name as sub_score_name,
       sk.name as skill_name,
       AVG(s.value) as average
-    FROM "Score" s
+    FROM "Step" s
     JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
     JOIN "SubScore" ss ON s."subScoreId" = ss.id
     JOIN "Skill" sk ON ss."skillId" = sk.id
@@ -237,7 +236,7 @@ export async function getSkillAverages(
     SELECT
       sk.name as skill_name,
       AVG(s.value) as average
-    FROM "Score" s
+    FROM "Step" s
     JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
     JOIN "SubScore" ss ON s."subScoreId" = ss.id
     JOIN "Skill" sk ON ss."skillId" = sk.id
@@ -269,7 +268,7 @@ export async function getGroupComparison(
       g.name as group_name,
       AVG(s.value) as average,
       COUNT(DISTINCT s."personId") as count
-    FROM "Score" s
+    FROM "Step" s
     JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
     JOIN "Person" p ON s."personId" = p.id
     JOIN "Group" g ON p."groupId" = g.id
@@ -293,30 +292,158 @@ export async function getTopBottomPerformers(
   const where = buildWhereClause(rubricId, filters);
 
   const result = await prisma.$queryRawUnsafe<
-    { first_name: string; last_name: string; group_name: string; avg_score: number }[]
+    { first_name: string; last_name: string; group_name: string; avg_step: number }[]
   >(`
     SELECT
       p."firstName" as first_name,
       p."lastName" as last_name,
       g.name as group_name,
-      AVG(s.value) as avg_score
-    FROM "Score" s
+      AVG(s.value) as avg_step
+    FROM "Step" s
     JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
     JOIN "Person" p ON s."personId" = p.id
     JOIN "Group" g ON p."groupId" = g.id
     WHERE ${where}
     GROUP BY p.id, p."firstName", p."lastName", g.name
-    ORDER BY avg_score DESC
+    ORDER BY avg_step DESC
   `);
 
   const mapped = result.map((r) => ({
     name: `${r.first_name} ${r.last_name}`,
     groupName: r.group_name,
-    avg: Math.round(r.avg_score * 10) / 10,
+    avg: Math.round(r.avg_step * 10) / 10,
   }));
 
   return {
     top: mapped.slice(0, limit),
     bottom: mapped.slice(-limit).reverse(),
   };
+}
+
+// --- Trend queries: compare latest period vs previous period ---
+
+export async function getGroupTrends(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<{ groupName: string; current: number; previous: number; change: number; count: number }[]> {
+  const dateFilter = [
+    filters.dateFrom ? `AND s."assessedAt" >= '${filters.dateFrom}'` : "",
+    filters.dateTo ? `AND s."assessedAt" <= '${filters.dateTo}'` : "",
+  ].join(" ");
+
+  const result = await prisma.$queryRawUnsafe<
+    { group_name: string; assessed_at: Date; average: number; count: bigint }[]
+  >(`
+    SELECT
+      g.name as group_name,
+      s."assessedAt" as assessed_at,
+      AVG(s.value) as average,
+      COUNT(DISTINCT s."personId") as count
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "Person" p ON s."personId" = p.id
+    JOIN "Group" g ON p."groupId" = g.id
+    WHERE rs."rubricId" = '${rubricId}' ${dateFilter}
+    GROUP BY g.name, s."assessedAt"
+    ORDER BY g.name, s."assessedAt"
+  `);
+
+  // Group by name, get last two periods
+  const byGroup: Record<string, { date: Date; avg: number; count: number }[]> = {};
+  for (const row of result) {
+    const key = row.group_name;
+    if (!byGroup[key]) byGroup[key] = [];
+    byGroup[key].push({ date: row.assessed_at, avg: Number(row.average), count: Number(row.count) });
+  }
+
+  return Object.entries(byGroup).map(([groupName, periods]) => {
+    const current = periods[periods.length - 1];
+    const previous = periods.length >= 2 ? periods[periods.length - 2] : current;
+    return {
+      groupName,
+      current: Math.round(current.avg * 10) / 10,
+      previous: Math.round(previous.avg * 10) / 10,
+      change: Math.round((current.avg - previous.avg) * 10) / 10,
+      count: current.count,
+    };
+  }).sort((a, b) => b.current - a.current);
+}
+
+export async function getSkillTrends(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<{ skillName: string; current: number; previous: number; change: number }[]> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const result = await prisma.$queryRawUnsafe<
+    { skill_name: string; assessed_at: Date; average: number }[]
+  >(`
+    SELECT
+      sk.name as skill_name,
+      s."assessedAt" as assessed_at,
+      AVG(s.value) as average
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where}
+    GROUP BY sk.name, s."assessedAt"
+    ORDER BY sk.name, s."assessedAt"
+  `);
+
+  const bySkill: Record<string, { avg: number }[]> = {};
+  for (const row of result) {
+    if (!bySkill[row.skill_name]) bySkill[row.skill_name] = [];
+    bySkill[row.skill_name].push({ avg: Number(row.average) });
+  }
+
+  return Object.entries(bySkill).map(([skillName, periods]) => {
+    const current = periods[periods.length - 1];
+    const previous = periods.length >= 2 ? periods[periods.length - 2] : current;
+    return {
+      skillName,
+      current: Math.round(current.avg * 10) / 10,
+      previous: Math.round(previous.avg * 10) / 10,
+      change: Math.round((current.avg - previous.avg) * 10) / 10,
+    };
+  });
+}
+
+export async function getDistributionTrend(
+  rubricId: string,
+  filters: DashboardFilters
+): Promise<{ assessedAt: string; mean: number; stdDev: number; count: number }[]> {
+  const groupFilter =
+    filters.groupIds && filters.groupIds.length > 0
+      ? `AND p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})`
+      : "";
+
+  const result = await prisma.$queryRawUnsafe<
+    { assessed_at: Date; mean: number; stddev: number; count: bigint }[]
+  >(`
+    WITH person_period_avgs AS (
+      SELECT s."personId", s."assessedAt", AVG(s.value) as avg_step
+      FROM "Step" s
+      JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+      JOIN "Person" p ON s."personId" = p.id
+      WHERE rs."rubricId" = '${rubricId}' ${groupFilter}
+      GROUP BY s."personId", s."assessedAt"
+    )
+    SELECT
+      "assessedAt" as assessed_at,
+      AVG(avg_step) as mean,
+      COALESCE(STDDEV(avg_step), 0) as stddev,
+      COUNT(*) as count
+    FROM person_period_avgs
+    GROUP BY "assessedAt"
+    ORDER BY "assessedAt"
+  `);
+
+  return result.map((row) => ({
+    assessedAt: row.assessed_at.toISOString().split("T")[0],
+    mean: Math.round(Number(row.mean) * 10) / 10,
+    stdDev: Math.round(Number(row.stddev) * 10) / 10,
+    count: Number(row.count),
+  }));
 }

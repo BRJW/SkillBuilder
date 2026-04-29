@@ -10,11 +10,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { PersonWithScore } from "@/lib/types";
+import type { PersonWithSteps } from "@/lib/types";
 
-function getScoreBadgeVariant(score: number) {
-  if (score >= 80) return "default";
-  if (score >= 60) return "secondary";
+function getStepBadgeVariant(step: number) {
+  if (step >= 80) return "default";
+  if (step >= 60) return "secondary";
   return "outline";
 }
 
@@ -22,7 +22,7 @@ export function PersonTable({
   people,
   rubricId,
 }: {
-  people: PersonWithScore[];
+  people: PersonWithSteps[];
   rubricId: string;
 }) {
   return (
@@ -32,7 +32,7 @@ export function PersonTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Group</TableHead>
-            <TableHead className="text-right">Avg Score</TableHead>
+            <TableHead className="text-right">Avg Step</TableHead>
             <TableHead className="text-right">Assessments</TableHead>
           </TableRow>
         </TableHeader>
@@ -58,12 +58,12 @@ export function PersonTable({
                   {person.groupName}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Badge variant={getScoreBadgeVariant(person.averageScore)}>
-                    {person.averageScore.toFixed(1)}
+                  <Badge variant={getStepBadgeVariant(person.averageStep)}>
+                    {person.averageStep.toFixed(1)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  {person.scoreCount}
+                  {person.stepCount}
                 </TableCell>
               </TableRow>
             ))

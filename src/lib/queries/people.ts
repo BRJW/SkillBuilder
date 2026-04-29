@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import type { DashboardFilters, PersonWithScore, SubScoreDetail } from "@/lib/types";
+import type { DashboardFilters, PersonWithSteps, SubScoreDetail } from "@/lib/types";
 
 export async function getPeopleByRubric(
   rubricId: string,
   filters: DashboardFilters
-): Promise<PersonWithScore[]> {
+): Promise<PersonWithSteps[]> {
   const groupFilter =
     filters.groupIds && filters.groupIds.length > 0
       ? `AND p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})`
@@ -20,8 +20,8 @@ export async function getPeopleByRubric(
       first_name: string;
       last_name: string;
       group_name: string;
-      average_score: number;
-      score_count: bigint;
+      average_step: number;
+      step_count: bigint;
     }[]
   >(`
     SELECT
@@ -29,15 +29,15 @@ export async function getPeopleByRubric(
       p."firstName" as first_name,
       p."lastName" as last_name,
       g.name as group_name,
-      AVG(s.value) as average_score,
-      COUNT(s.id) as score_count
+      AVG(s.value) as average_step,
+      COUNT(s.id) as step_count
     FROM "Person" p
     JOIN "Group" g ON p."groupId" = g.id
-    JOIN "Score" s ON s."personId" = p.id
+    JOIN "Step" s ON s."personId" = p.id
     JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
     WHERE rs."rubricId" = '${rubricId}' ${groupFilter} ${dateFilter}
     GROUP BY p.id, p."firstName", p."lastName", g.name
-    ORDER BY average_score DESC
+    ORDER BY average_step DESC
   `);
 
   return result.map((row) => ({
@@ -45,16 +45,16 @@ export async function getPeopleByRubric(
     firstName: row.first_name,
     lastName: row.last_name,
     groupName: row.group_name,
-    averageScore: Math.round(row.average_score * 10) / 10,
-    scoreCount: Number(row.score_count),
+    averageStep: Math.round(row.average_step * 10) / 10,
+    stepCount: Number(row.step_count),
   }));
 }
 
-export async function getPersonScores(
+export async function getPersonSteps(
   personId: string,
   rubricId: string
 ): Promise<SubScoreDetail[]> {
-  const scores = await prisma.score.findMany({
+  const steps = await prisma.step.findMany({
     where: {
       personId,
       subScore: {
@@ -72,19 +72,19 @@ export async function getPersonScores(
   });
 
   const grouped: Record<string, SubScoreDetail> = {};
-  for (const score of scores) {
-    const key = score.subScoreId;
+  for (const step of steps) {
+    const key = step.subScoreId;
     if (!grouped[key]) {
       grouped[key] = {
-        subScoreId: score.subScoreId,
-        subScoreName: score.subScore.name,
-        skillName: score.subScore.skill.name,
+        subScoreId: step.subScoreId,
+        subScoreName: step.subScore.name,
+        skillName: step.subScore.skill.name,
         values: [],
       };
     }
     grouped[key].values.push({
-      assessedAt: score.assessedAt.toISOString().split("T")[0],
-      value: score.value,
+      assessedAt: step.assessedAt.toISOString().split("T")[0],
+      value: step.value,
     });
   }
 

@@ -32,7 +32,7 @@ model Person {
   email     String?
   groupId   String
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  scores    Score[]
+  steps     Step[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -53,7 +53,7 @@ model SubScore {
   skillId         String
   skill           Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
   sortOrder       Int              @default(0)
-  scores          Score[]
+  steps           Step[]
   rubricSubScores RubricSubScore[]
   createdAt       DateTime         @default(now())
 
@@ -61,9 +61,9 @@ model SubScore {
   @@index([skillId])
 }
 
-model Score {
+model Step {
   id         String   @id @default(cuid())
-  value      Int
+  value      Float
   personId   String
   person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
   subScoreId String
