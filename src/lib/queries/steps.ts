@@ -846,8 +846,231 @@ export async function getDistributionByPeriod(
     const label = sr.assessed_at.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
     return {
       key: label,
+      rawKey: key,
       buckets: buildBucketsFromRaw(byPeriod[key] || []),
       stats: buildStats(sr),
     };
   });
+}
+
+// --- Drill-down distribution queries ---
+
+export async function getDistributionDrillSkill(
+  rubricId: string,
+  skillName: string,
+  filters: DashboardFilters
+): Promise<ScopedDistribution[]> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const bucketRows = await prisma.$queryRawUnsafe<
+    { sub_score_name: string; bucket: number; count: bigint }[]
+  >(`
+    SELECT
+      ss.name as sub_score_name,
+      FLOOR(s.value / 5) * 5 as bucket,
+      COUNT(*) as count
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where} AND sk.name = '${skillName.replace(/'/g, "''")}'
+    GROUP BY ss.name, bucket
+    ORDER BY ss.name, bucket
+  `);
+
+  const statsRows = await prisma.$queryRawUnsafe<
+    {
+      sub_score_name: string; mean: number; median: number; stddev: number;
+      p25: number; p75: number; count: bigint;
+      above_50: bigint; above_60: bigint; above_70: bigint; above_80: bigint;
+    }[]
+  >(`
+    SELECT
+      ss.name as sub_score_name,
+      AVG(s.value) as mean,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY s.value) as median,
+      COALESCE(STDDEV(s.value), 0) as stddev,
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY s.value) as p25,
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY s.value) as p75,
+      COUNT(*) as count,
+      COUNT(CASE WHEN s.value >= 50 THEN 1 END) as above_50,
+      COUNT(CASE WHEN s.value >= 60 THEN 1 END) as above_60,
+      COUNT(CASE WHEN s.value >= 70 THEN 1 END) as above_70,
+      COUNT(CASE WHEN s.value >= 80 THEN 1 END) as above_80
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where} AND sk.name = '${skillName.replace(/'/g, "''")}'
+    GROUP BY ss.name
+    ORDER BY ss.name
+  `);
+
+  const bySubScore: Record<string, { bucket: number; count: bigint }[]> = {};
+  for (const row of bucketRows) {
+    if (!bySubScore[row.sub_score_name]) bySubScore[row.sub_score_name] = [];
+    bySubScore[row.sub_score_name].push({ bucket: row.bucket, count: row.count });
+  }
+
+  return statsRows.map((sr) => ({
+    key: sr.sub_score_name,
+    buckets: buildBucketsFromRaw(bySubScore[sr.sub_score_name] || []),
+    stats: buildStats(sr),
+  }));
+}
+
+export async function getDistributionDrillGroup(
+  rubricId: string,
+  groupName: string,
+  filters: DashboardFilters
+): Promise<ScopedDistribution[]> {
+  const dateFilter = [
+    filters.dateFrom ? `AND s."assessedAt" >= '${filters.dateFrom}'` : "",
+    filters.dateTo ? `AND s."assessedAt" <= '${filters.dateTo}'` : "",
+  ].join(" ");
+
+  const bucketRows = await prisma.$queryRawUnsafe<
+    { skill_name: string; bucket: number; count: bigint }[]
+  >(`
+    WITH person_skill_avgs AS (
+      SELECT s."personId", sk.name as skill_name, AVG(s.value) as avg_step
+      FROM "Step" s
+      JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+      JOIN "SubScore" ss ON s."subScoreId" = ss.id
+      JOIN "Skill" sk ON ss."skillId" = sk.id
+      JOIN "Person" p ON s."personId" = p.id
+      JOIN "Group" g ON p."groupId" = g.id
+      WHERE rs."rubricId" = '${rubricId}' AND g.name = '${groupName.replace(/'/g, "''")}' ${dateFilter}
+      GROUP BY s."personId", sk.name
+    )
+    SELECT skill_name, FLOOR(avg_step / 5) * 5 as bucket, COUNT(*) as count
+    FROM person_skill_avgs
+    GROUP BY skill_name, bucket
+    ORDER BY skill_name, bucket
+  `);
+
+  const statsRows = await prisma.$queryRawUnsafe<
+    {
+      skill_name: string; mean: number; median: number; stddev: number;
+      p25: number; p75: number; count: bigint;
+      above_50: bigint; above_60: bigint; above_70: bigint; above_80: bigint;
+    }[]
+  >(`
+    WITH person_skill_avgs AS (
+      SELECT s."personId", sk.name as skill_name, AVG(s.value) as avg_step
+      FROM "Step" s
+      JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+      JOIN "SubScore" ss ON s."subScoreId" = ss.id
+      JOIN "Skill" sk ON ss."skillId" = sk.id
+      JOIN "Person" p ON s."personId" = p.id
+      JOIN "Group" g ON p."groupId" = g.id
+      WHERE rs."rubricId" = '${rubricId}' AND g.name = '${groupName.replace(/'/g, "''")}' ${dateFilter}
+      GROUP BY s."personId", sk.name
+    )
+    SELECT
+      skill_name,
+      AVG(avg_step) as mean,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_step) as median,
+      COALESCE(STDDEV(avg_step), 0) as stddev,
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY avg_step) as p25,
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY avg_step) as p75,
+      COUNT(*) as count,
+      COUNT(CASE WHEN avg_step >= 50 THEN 1 END) as above_50,
+      COUNT(CASE WHEN avg_step >= 60 THEN 1 END) as above_60,
+      COUNT(CASE WHEN avg_step >= 70 THEN 1 END) as above_70,
+      COUNT(CASE WHEN avg_step >= 80 THEN 1 END) as above_80
+    FROM person_skill_avgs
+    GROUP BY skill_name
+    ORDER BY skill_name
+  `);
+
+  const bySkill: Record<string, { bucket: number; count: bigint }[]> = {};
+  for (const row of bucketRows) {
+    if (!bySkill[row.skill_name]) bySkill[row.skill_name] = [];
+    bySkill[row.skill_name].push({ bucket: row.bucket, count: row.count });
+  }
+
+  return statsRows.map((sr) => ({
+    key: sr.skill_name,
+    buckets: buildBucketsFromRaw(bySkill[sr.skill_name] || []),
+    stats: buildStats(sr),
+  }));
+}
+
+export async function getDistributionDrillPeriod(
+  rubricId: string,
+  periodDate: string,
+  filters: DashboardFilters
+): Promise<ScopedDistribution[]> {
+  const groupFilter =
+    filters.groupIds && filters.groupIds.length > 0
+      ? `AND p."groupId" IN (${filters.groupIds.map((id) => `'${id}'`).join(",")})`
+      : "";
+
+  const bucketRows = await prisma.$queryRawUnsafe<
+    { skill_name: string; bucket: number; count: bigint }[]
+  >(`
+    WITH person_skill_avgs AS (
+      SELECT s."personId", sk.name as skill_name, AVG(s.value) as avg_step
+      FROM "Step" s
+      JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+      JOIN "SubScore" ss ON s."subScoreId" = ss.id
+      JOIN "Skill" sk ON ss."skillId" = sk.id
+      JOIN "Person" p ON s."personId" = p.id
+      WHERE rs."rubricId" = '${rubricId}' AND s."assessedAt"::date = '${periodDate}' ${groupFilter}
+      GROUP BY s."personId", sk.name
+    )
+    SELECT skill_name, FLOOR(avg_step / 5) * 5 as bucket, COUNT(*) as count
+    FROM person_skill_avgs
+    GROUP BY skill_name, bucket
+    ORDER BY skill_name, bucket
+  `);
+
+  const statsRows = await prisma.$queryRawUnsafe<
+    {
+      skill_name: string; mean: number; median: number; stddev: number;
+      p25: number; p75: number; count: bigint;
+      above_50: bigint; above_60: bigint; above_70: bigint; above_80: bigint;
+    }[]
+  >(`
+    WITH person_skill_avgs AS (
+      SELECT s."personId", sk.name as skill_name, AVG(s.value) as avg_step
+      FROM "Step" s
+      JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+      JOIN "SubScore" ss ON s."subScoreId" = ss.id
+      JOIN "Skill" sk ON ss."skillId" = sk.id
+      JOIN "Person" p ON s."personId" = p.id
+      WHERE rs."rubricId" = '${rubricId}' AND s."assessedAt"::date = '${periodDate}' ${groupFilter}
+      GROUP BY s."personId", sk.name
+    )
+    SELECT
+      skill_name,
+      AVG(avg_step) as mean,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_step) as median,
+      COALESCE(STDDEV(avg_step), 0) as stddev,
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY avg_step) as p25,
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY avg_step) as p75,
+      COUNT(*) as count,
+      COUNT(CASE WHEN avg_step >= 50 THEN 1 END) as above_50,
+      COUNT(CASE WHEN avg_step >= 60 THEN 1 END) as above_60,
+      COUNT(CASE WHEN avg_step >= 70 THEN 1 END) as above_70,
+      COUNT(CASE WHEN avg_step >= 80 THEN 1 END) as above_80
+    FROM person_skill_avgs
+    GROUP BY skill_name
+    ORDER BY skill_name
+  `);
+
+  const bySkill: Record<string, { bucket: number; count: bigint }[]> = {};
+  for (const row of bucketRows) {
+    if (!bySkill[row.skill_name]) bySkill[row.skill_name] = [];
+    bySkill[row.skill_name].push({ bucket: row.bucket, count: row.count });
+  }
+
+  return statsRows.map((sr) => ({
+    key: sr.skill_name,
+    buckets: buildBucketsFromRaw(bySkill[sr.skill_name] || []),
+    stats: buildStats(sr),
+  }));
 }

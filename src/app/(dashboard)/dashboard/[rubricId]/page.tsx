@@ -133,6 +133,7 @@ export default async function RubricDashboardPage({
 
         <TabsContent value="distribution">
           <DistributionView
+            rubricId={rubricId}
             overall={distribution}
             distributionTrend={distributionTrend}
             bySkill={distBySkill}

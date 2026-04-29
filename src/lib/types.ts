@@ -79,6 +79,8 @@ export interface GoalAttainmentRow {
 
 export interface ScopedDistribution {
   key: string;
+  /** Raw identifier for drill-down lookups (e.g. ISO date for periods) */
+  rawKey?: string;
   buckets: DistributionBucket[];
   stats: {
     mean: number;

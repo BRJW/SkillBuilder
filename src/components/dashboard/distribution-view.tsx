@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bar,
@@ -21,14 +22,7 @@ import {
 } from "@/components/ui/chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { BarChart3, TrendingUp, TrendingDown, Minus, Users } from "lucide-react";
+import { BarChart3, ChevronRight, Loader2, Users } from "lucide-react";
 import { SKILL_COLORS } from "@/lib/constants";
 import type { SkillName } from "@/lib/constants";
 import type { DistributionBucket, ScopedDistribution } from "@/lib/types";
@@ -63,6 +57,12 @@ const SCOPE_COLORS = [
   "hsl(0, 70%, 55%)",
 ];
 
+function getScopeColor(key: string, index: number, scopeType: string) {
+  if (scopeType === "skill" || scopeType === "drillSkill")
+    return SKILL_COLORS[key as SkillName] || SCOPE_COLORS[index % SCOPE_COLORS.length];
+  return SCOPE_COLORS[index % SCOPE_COLORS.length];
+}
+
 // --- Sub-components ---
 
 function Histogram({
@@ -80,10 +80,10 @@ function Histogram({
     : 0;
   const goalBucket = `${Math.floor(goalThreshold / 5) * 5}`;
 
-  const config = { count: { label: "People", color: "hsl(210, 70%, 55%)" } };
+  const config = { count: { label: "Count", color: "hsl(210, 70%, 55%)" } };
 
   return (
-    <ChartContainer config={config} className={`w-full`} style={{ height }}>
+    <ChartContainer config={config} className="w-full" style={{ height }}>
       <BarChart data={data} accessibilityLayer>
         <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.2} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} fontSize={10} />
@@ -92,7 +92,7 @@ function Histogram({
           content={
             <ChartTooltipContent
               formatter={(value, _name, item) => (
-                <span>{Number(value)} people ({item.payload.rangeStart}-{item.payload.rangeEnd})</span>
+                <span>{Number(value)} ({item.payload.rangeStart}-{item.payload.rangeEnd})</span>
               )}
             />
           }
@@ -110,7 +110,7 @@ function Histogram({
           stroke="hsl(152, 60%, 48%)"
           strokeWidth={2}
           strokeDasharray="6 3"
-          label={{ value: `Goal`, position: "insideTopRight", fontSize: 10, fill: "hsl(152, 60%, 38%)" }}
+          label={{ value: "Goal", position: "insideTopRight", fontSize: 10, fill: "hsl(152, 60%, 38%)" }}
         />
         <Bar dataKey="count" radius={[5, 5, 0, 0]} maxBarSize={32}>
           {data.map((entry, index) => (
@@ -126,15 +126,7 @@ function Histogram({
   );
 }
 
-function StatsPill({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
+function StatsPill({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-xs">
       {color && <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />}
@@ -144,36 +136,23 @@ function StatsPill({
   );
 }
 
-function StatsBar({ dist, goalThreshold, color }: { dist: ScopedDistribution; goalThreshold: number; color?: string }) {
-  const pctAbove = getGoalPct(dist.stats, goalThreshold);
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <StatsPill label="Mean" value={dist.stats.mean.toFixed(1)} color={color} />
-      <StatsPill label="Median" value={dist.stats.median.toFixed(1)} />
-      <StatsPill label="Std Dev" value={dist.stats.stdDev.toFixed(1)} />
-      <StatsPill label="IQR" value={`${dist.stats.p25.toFixed(0)}–${dist.stats.p75.toFixed(0)}`} />
-      <StatsPill label={`≥${goalThreshold}`} value={`${pctAbove.toFixed(1)}%`} />
-      <StatsPill label="n" value={`${dist.stats.count}`} />
-    </div>
-  );
-}
-
 function SmallMultipleGrid({
   distributions,
   goalThreshold,
   scopeType,
+  onDrill,
 }: {
   distributions: ScopedDistribution[];
   goalThreshold: number;
-  scopeType: "skill" | "group" | "period";
+  scopeType: string;
+  onDrill?: (dist: ScopedDistribution) => void;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {distributions.map((dist, i) => {
-        const color = scopeType === "skill"
-          ? SKILL_COLORS[dist.key as SkillName] || SCOPE_COLORS[i % SCOPE_COLORS.length]
-          : SCOPE_COLORS[i % SCOPE_COLORS.length];
+        const color = getScopeColor(dist.key, i, scopeType);
         const pctAbove = getGoalPct(dist.stats, goalThreshold);
+        const clickable = !!onDrill;
 
         return (
           <motion.div
@@ -182,7 +161,14 @@ function SmallMultipleGrid({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.04 }}
           >
-            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+            <Card
+              className={`overflow-hidden transition-shadow ${
+                clickable
+                  ? "cursor-pointer hover:shadow-lg hover:ring-1 hover:ring-primary/30"
+                  : "hover:shadow-md"
+              }`}
+              onClick={clickable ? () => onDrill(dist) : undefined}
+            >
               <CardHeader className="pb-1 pt-3 px-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -199,6 +185,9 @@ function SmallMultipleGrid({
                     >
                       {pctAbove.toFixed(0)}% ≥{goalThreshold}
                     </Badge>
+                    {clickable && (
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -217,42 +206,50 @@ function ComparisonTable({
   distributions,
   goalThreshold,
   scopeType,
+  onDrill,
 }: {
   distributions: ScopedDistribution[];
   goalThreshold: number;
-  scopeType: "skill" | "group" | "period";
+  scopeType: string;
+  onDrill?: (dist: ScopedDistribution) => void;
 }) {
   const sorted = [...distributions].sort((a, b) => b.stats.mean - a.stats.mean);
+  const clickable = !!onDrill;
+  const scopeLabel = scopeType === "skill" ? "Skill" : scopeType === "group" ? "Group" : scopeType === "period" ? "Period" : "Sub-Score";
 
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-muted/50">
-            <th className="text-left p-2.5 font-medium">{scopeType === "skill" ? "Skill" : scopeType === "group" ? "Group" : "Period"}</th>
+            <th className="text-left p-2.5 font-medium">{scopeLabel}</th>
             <th className="text-right p-2.5 font-medium">Mean</th>
             <th className="text-right p-2.5 font-medium">Median</th>
             <th className="text-right p-2.5 font-medium">Std Dev</th>
             <th className="text-right p-2.5 font-medium">P25</th>
             <th className="text-right p-2.5 font-medium">P75</th>
             <th className="text-right p-2.5 font-medium">≥{goalThreshold}</th>
-            <th className="text-right p-2.5 font-medium">People</th>
+            <th className="text-right p-2.5 font-medium">Count</th>
+            {clickable && <th className="w-8" />}
           </tr>
         </thead>
         <tbody>
           {sorted.map((dist, i) => {
-            const color = scopeType === "skill"
-              ? SKILL_COLORS[dist.key as SkillName] || SCOPE_COLORS[i % SCOPE_COLORS.length]
-              : SCOPE_COLORS[i % SCOPE_COLORS.length];
+            const color = getScopeColor(dist.key, i, scopeType);
             const pctAbove = getGoalPct(dist.stats, goalThreshold);
 
             return (
               <motion.tr
                 key={dist.key}
-                className="border-t hover:bg-muted/30 transition-colors"
+                className={`border-t transition-colors ${
+                  clickable
+                    ? "cursor-pointer hover:bg-primary/5"
+                    : "hover:bg-muted/30"
+                }`}
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.03 }}
+                onClick={clickable ? () => onDrill(dist) : undefined}
               >
                 <td className="p-2.5 font-medium">
                   <div className="flex items-center gap-2">
@@ -271,6 +268,11 @@ function ComparisonTable({
                   </span>
                 </td>
                 <td className="p-2.5 text-right text-muted-foreground">{dist.stats.count}</td>
+                {clickable && (
+                  <td className="p-2.5">
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </td>
+                )}
               </motion.tr>
             );
           })}
@@ -280,9 +282,38 @@ function ComparisonTable({
   );
 }
 
+function Breadcrumb({
+  items,
+  onNavigate,
+}: {
+  items: { label: string; onClick?: () => void }[];
+  onNavigate?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 text-sm">
+      {items.map((item, i) => (
+        <span key={i} className="flex items-center gap-1">
+          {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+          {item.onClick ? (
+            <button
+              onClick={item.onClick}
+              className="text-primary hover:underline font-medium"
+            >
+              {item.label}
+            </button>
+          ) : (
+            <span className="font-semibold">{item.label}</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // --- Main Component ---
 
 interface DistributionViewProps {
+  rubricId: string;
   overall: DistributionBucket[];
   distributionTrend: { assessedAt: string; mean: number; stdDev: number; count: number }[];
   bySkill: ScopedDistribution[];
@@ -293,7 +324,16 @@ interface DistributionViewProps {
 const GOAL_OPTIONS = [50, 60, 70, 80];
 type ScopeView = "overall" | "skill" | "group" | "period";
 
+interface DrillState {
+  scope: "skill" | "group" | "period";
+  key: string;
+  label: string;
+  data: ScopedDistribution[] | null;
+  loading: boolean;
+}
+
 export function DistributionView({
+  rubricId,
   overall,
   distributionTrend,
   bySkill,
@@ -302,6 +342,8 @@ export function DistributionView({
 }: DistributionViewProps) {
   const [scope, setScope] = useState<ScopeView>("overall");
   const [goalThreshold, setGoalThreshold] = useState(70);
+  const [drill, setDrill] = useState<DrillState | null>(null);
+  const searchParams = useSearchParams();
 
   const total = overall.reduce((sum, d) => sum + d.count, 0);
   const weightedAvg = total > 0
@@ -309,6 +351,46 @@ export function DistributionView({
     : 0;
 
   const distributions = scope === "skill" ? bySkill : scope === "group" ? byGroup : scope === "period" ? byPeriod : [];
+
+  const fetchDrill = useCallback(async (drillScope: "skill" | "group" | "period", dist: ScopedDistribution) => {
+    const lookupKey = dist.rawKey || dist.key;
+    setDrill({ scope: drillScope, key: lookupKey, label: dist.key, data: null, loading: true });
+
+    const qp = new URLSearchParams();
+    qp.set("scope", drillScope);
+    qp.set("key", lookupKey);
+    const group = searchParams.get("group");
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    if (group) qp.set("group", group);
+    if (from) qp.set("from", from);
+    if (to) qp.set("to", to);
+
+    try {
+      const res = await fetch(`/api/distribution/${rubricId}/drill?${qp.toString()}`);
+      if (!res.ok) throw new Error("fetch failed");
+      const data: ScopedDistribution[] = await res.json();
+      setDrill((prev) => prev ? { ...prev, data, loading: false } : null);
+    } catch {
+      setDrill((prev) => prev ? { ...prev, data: [], loading: false } : null);
+    }
+  }, [rubricId, searchParams]);
+
+  const handleDrill = useCallback((dist: ScopedDistribution) => {
+    if (scope === "skill" || scope === "group" || scope === "period") {
+      fetchDrill(scope, dist);
+    }
+  }, [scope, fetchDrill]);
+
+  const clearDrill = useCallback(() => setDrill(null), []);
+
+  const handleScopeChange = useCallback((newScope: ScopeView) => {
+    setScope(newScope);
+    setDrill(null);
+  }, []);
+
+  const drillScopeLabel = drill?.scope === "skill" ? "Sub-Scores" : "Skills";
+  const parentScopeLabel = scope === "skill" ? "Skills" : scope === "group" ? "Groups" : "Periods";
 
   return (
     <motion.div
@@ -323,14 +405,14 @@ export function DistributionView({
           <span className="text-sm font-medium text-muted-foreground">View:</span>
           <div className="flex rounded-lg border overflow-hidden">
             {([
-              { key: "overall", label: "Overall" },
-              { key: "skill", label: "By Skill" },
-              { key: "group", label: "By Group" },
-              { key: "period", label: "By Period" },
-            ] as { key: ScopeView; label: string }[]).map((opt) => (
+              { key: "overall" as const, label: "Overall" },
+              { key: "skill" as const, label: "By Skill" },
+              { key: "group" as const, label: "By Group" },
+              { key: "period" as const, label: "By Period" },
+            ]).map((opt) => (
               <button
                 key={opt.key}
-                onClick={() => setScope(opt.key)}
+                onClick={() => handleScopeChange(opt.key)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                   scope === opt.key
                     ? "bg-primary text-primary-foreground"
@@ -368,8 +450,19 @@ export function DistributionView({
         </div>
       </div>
 
+      {/* Breadcrumb when drilled */}
+      {drill && (
+        <Breadcrumb
+          items={[
+            { label: parentScopeLabel, onClick: clearDrill },
+            { label: drill.label },
+          ]}
+        />
+      )}
+
       <AnimatePresence mode="wait">
-        {scope === "overall" ? (
+        {/* --- Overall view --- */}
+        {scope === "overall" && !drill ? (
           <motion.div
             key="overall"
             initial={{ opacity: 0, y: 8 }}
@@ -378,7 +471,6 @@ export function DistributionView({
             transition={{ duration: 0.25 }}
             className="space-y-6"
           >
-            {/* Main histogram */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -394,7 +486,6 @@ export function DistributionView({
               </CardContent>
             </Card>
 
-            {/* Trend mini chart */}
             {distributionTrend.length > 1 && (
               <Card>
                 <CardHeader>
@@ -435,6 +526,61 @@ export function DistributionView({
               </Card>
             )}
           </motion.div>
+
+        /* --- Drilled-down view --- */
+        ) : drill ? (
+          <motion.div
+            key={`drill-${drill.scope}-${drill.key}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-6"
+          >
+            {drill.loading ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading {drillScopeLabel.toLowerCase()}...</span>
+                </CardContent>
+              </Card>
+            ) : drill.data && drill.data.length > 0 ? (
+              <>
+                {/* Summary stats for parent */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      {drill.label} — {drillScopeLabel}
+                    </CardTitle>
+                    <CardDescription>
+                      {drill.data.length} {drillScopeLabel.toLowerCase()} within {drill.label}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ComparisonTable
+                      distributions={drill.data}
+                      goalThreshold={goalThreshold}
+                      scopeType={drill.scope === "skill" ? "subScore" : "drillSkill"}
+                    />
+                  </CardContent>
+                </Card>
+
+                <SmallMultipleGrid
+                  distributions={drill.data}
+                  goalThreshold={goalThreshold}
+                  scopeType={drill.scope === "skill" ? "subScore" : "drillSkill"}
+                />
+              </>
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  No data available for this drill-down.
+                </CardContent>
+              </Card>
+            )}
+          </motion.div>
+
+        /* --- Scoped list view (skill / group / period) --- */
         ) : (
           <motion.div
             key={scope}
@@ -444,30 +590,30 @@ export function DistributionView({
             transition={{ duration: 0.25 }}
             className="space-y-6"
           >
-            {/* Comparison table */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  {scope === "skill" ? "Skill" : scope === "group" ? "Group" : "Period"} Comparison
+                  {parentScopeLabel} Comparison
                 </CardTitle>
                 <CardDescription>
-                  Summary statistics across {distributions.length} {scope === "skill" ? "skills" : scope === "group" ? "groups" : "periods"}
+                  Click a row to drill into its {scope === "skill" ? "sub-scores" : "skills"}. {distributions.length} {parentScopeLabel.toLowerCase()} shown.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <ComparisonTable
                   distributions={distributions}
                   goalThreshold={goalThreshold}
-                  scopeType={scope as "skill" | "group" | "period"}
+                  scopeType={scope}
+                  onDrill={handleDrill}
                 />
               </CardContent>
             </Card>
 
-            {/* Small multiples */}
             <SmallMultipleGrid
               distributions={distributions}
               goalThreshold={goalThreshold}
-              scopeType={scope as "skill" | "group" | "period"}
+              scopeType={scope}
+              onDrill={handleDrill}
             />
           </motion.div>
         )}
