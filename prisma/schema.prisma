@@ -82,6 +82,7 @@ model Rubric {
   id          String           @id @default(cuid())
   name        String
   description String?
+  goalScore   Float            @default(70)
   subScores   RubricSubScore[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -94,6 +95,7 @@ model RubricSubScore {
   subScoreId String
   subScore   SubScore @relation(fields: [subScoreId], references: [id], onDelete: Cascade)
   weight     Float    @default(1.0)
+  goalScore  Float?
 
   @@unique([rubricId, subScoreId])
   @@index([rubricId])

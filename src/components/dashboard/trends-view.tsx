@@ -37,6 +37,7 @@ import type {
   SkillPeriodRow,
   SubScorePeriodRow,
   GoalAttainmentRow,
+  RubricGoal,
 } from "@/lib/types";
 
 // --- Helpers ---
@@ -113,11 +114,11 @@ function TrendArrow({ change }: { change: number }) {
 function HeatmapTable({
   rows,
   periods,
-  goalThreshold,
+  goals,
 }: {
   rows: { label: string; skillName: string; values: number[] }[];
   periods: string[];
-  goalThreshold: number;
+  goals: RubricGoal;
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border">
@@ -142,6 +143,7 @@ function HeatmapTable({
               ? row.values[row.values.length - 1] - row.values[0]
               : 0;
             const color = SKILL_COLORS[row.skillName as SkillName] || "hsl(210, 60%, 55%)";
+            const goalForRow = goals.skillGoals[row.skillName] ?? goals.rubricGoal;
 
             return (
               <motion.tr
@@ -163,13 +165,13 @@ function HeatmapTable({
                 {row.values.map((val, i) => {
                   const bg = getHeatColor(val);
                   const textCol = getTextColor(val);
-                  const belowGoal = val < goalThreshold;
+                  const belowGoal = val < goalForRow;
                   return (
                     <td key={i} className="p-1 text-center">
                       <div
                         className="rounded-md px-2 py-1.5 text-xs font-mono font-medium transition-all duration-200 hover:scale-110 hover:shadow-md cursor-default"
                         style={{ backgroundColor: bg, color: textCol }}
-                        title={`${row.label}: ${val.toFixed(1)} (${belowGoal ? "below" : "at/above"} goal of ${goalThreshold})`}
+                        title={`${row.label}: ${val.toFixed(1)} (${belowGoal ? "below" : "at/above"} goal of ${goalForRow.toFixed(0)})`}
                       >
                         {val.toFixed(1)}
                         {belowGoal && (
@@ -210,26 +212,15 @@ function HeatmapTable({
 
 function GoalChart({
   data,
-  goalThreshold,
+  goals,
 }: {
   data: GoalAttainmentRow[];
-  goalThreshold: number;
+  goals: RubricGoal;
 }) {
-  const thresholdKey =
-    goalThreshold >= 90
-      ? "above90"
-      : goalThreshold >= 80
-      ? "above80"
-      : goalThreshold >= 70
-      ? "above70"
-      : goalThreshold >= 60
-      ? "above60"
-      : "above50";
-
   const chartData = data.map((row) => ({
     label: row.label,
-    pct: row.total > 0 ? Math.round((row[thresholdKey] / row.total) * 1000) / 10 : 0,
-    count: row[thresholdKey],
+    pct: row.total > 0 ? Math.round((row.meetingStandard / row.total) * 1000) / 10 : 0,
+    count: row.meetingStandard,
     total: row.total,
   }));
 
@@ -238,7 +229,7 @@ function GoalChart({
   const pctChange = latest && first ? latest.pct - first.pct : 0;
 
   const config = {
-    pct: { label: `% ≥ ${goalThreshold}`, color: "hsl(152, 60%, 48%)" },
+    pct: { label: `% ≥ ${goals.rubricGoal}`, color: "hsl(152, 60%, 48%)" },
   };
 
   return (
@@ -248,10 +239,10 @@ function GoalChart({
           <div>
             <CardTitle className="text-base flex items-center gap-2">
               <Target className="h-4 w-4 text-emerald-500" />
-              Goal Attainment
+              Standard Attainment
             </CardTitle>
             <CardDescription>
-              % of people scoring ≥ {goalThreshold}
+              % of people scoring ≥ {goals.rubricGoal}
             </CardDescription>
           </div>
           {latest && (
@@ -306,6 +297,96 @@ function GoalChart({
   );
 }
 
+function CumulativeAttainmentChart({
+  data,
+  goals,
+}: {
+  data: GoalAttainmentRow[];
+  goals: RubricGoal;
+}) {
+  if (data.length === 0) return null;
+
+  // Fractions from the data
+  const fractions = data[0]?.fractionalCounts.map((f) => f.fraction) ?? [];
+  if (fractions.length === 0) return null;
+
+  const FRAC_COLORS = [
+    "hsl(0, 60%, 55%)",     // 50%
+    "hsl(25, 75%, 55%)",    // 60%
+    "hsl(45, 85%, 50%)",    // 70%
+    "hsl(90, 55%, 45%)",    // 80%
+    "hsl(152, 55%, 45%)",   // 90%
+    "hsl(210, 70%, 50%)",   // 100%
+  ];
+
+  const chartData = data.map((row) => {
+    const point: Record<string, string | number> = { label: row.label, total: row.total };
+    for (const fc of row.fractionalCounts) {
+      const pct = row.total > 0 ? Math.round((fc.count / row.total) * 1000) / 10 : 0;
+      point[`f${fc.fraction}`] = pct;
+    }
+    return point;
+  });
+
+  const config = Object.fromEntries(
+    fractions.map((f, i) => [
+      `f${f}`,
+      { label: `≥ ${Math.round(f * 100)}% of standard`, color: FRAC_COLORS[i % FRAC_COLORS.length] },
+    ])
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Cumulative Standard Attainment</CardTitle>
+        <CardDescription>
+          % of people meeting each fraction of the standard ({goals.rubricGoal})
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={config} className="h-[250px] w-full">
+          <AreaChart data={chartData} accessibilityLayer>
+            <defs>
+              {fractions.map((f, i) => (
+                <linearGradient key={f} id={`fracFill${f}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={FRAC_COLORS[i % FRAC_COLORS.length]} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={FRAC_COLORS[i % FRAC_COLORS.length]} stopOpacity={0.05} />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.2} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+            <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `${v}%`} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            {[...fractions].reverse().map((f, i) => {
+              const ri = fractions.length - 1 - i;
+              return (
+                <Area
+                  key={f}
+                  type="monotone"
+                  dataKey={`f${f}`}
+                  stroke={FRAC_COLORS[ri % FRAC_COLORS.length]}
+                  strokeWidth={1.5}
+                  fill={`url(#fracFill${f})`}
+                  dot={false}
+                />
+              );
+            })}
+          </AreaChart>
+        </ChartContainer>
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-2 text-xs text-muted-foreground">
+          {fractions.map((f, i) => (
+            <div key={f} className="flex items-center gap-1.5">
+              <div className="w-3 h-2 rounded-sm" style={{ backgroundColor: FRAC_COLORS[i % FRAC_COLORS.length] }} />
+              ≥{Math.round(f * 100)}%
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PercentileMini({ data }: { data: PercentileBandPoint[] }) {
   const formatted = data.map((d) => ({
     ...d,
@@ -351,7 +432,7 @@ function PercentileMini({ data }: { data: PercentileBandPoint[] }) {
 
 // --- Color Legend ---
 
-function ColorLegend({ goalThreshold }: { goalThreshold: number }) {
+function ColorLegend({ goals }: { goals: RubricGoal }) {
   const stops = [0, 20, 40, 60, 80, 100];
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -368,7 +449,7 @@ function ColorLegend({ goalThreshold }: { goalThreshold: number }) {
       <span>High</span>
       <div className="flex items-center gap-1 ml-3">
         <span className="opacity-70">•</span>
-        <span>Below goal ({goalThreshold})</span>
+        <span>Below standard ({goals.rubricGoal})</span>
       </div>
     </div>
   );
@@ -377,22 +458,21 @@ function ColorLegend({ goalThreshold }: { goalThreshold: number }) {
 // --- Main Component ---
 
 interface TrendsViewProps {
+  goals: RubricGoal;
   percentiles: PercentileBandPoint[];
   skillMatrix: SkillPeriodRow[];
   subScoreMatrix: SubScorePeriodRow[];
   goalAttainment: GoalAttainmentRow[];
 }
 
-const GOAL_OPTIONS = [50, 60, 70, 80, 90];
-
 export function TrendsView({
+  goals,
   percentiles,
   skillMatrix,
   subScoreMatrix,
   goalAttainment,
 }: TrendsViewProps) {
   const [selectedSkill, setSelectedSkill] = useState<string>("all");
-  const [goalThreshold, setGoalThreshold] = useState(70);
 
   // Get all unique periods
   const allPeriods = skillMatrix.length > 0
@@ -444,35 +524,25 @@ export function TrendsView({
           </Select>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Goal:</span>
-          <div className="flex rounded-lg border overflow-hidden">
-            {GOAL_OPTIONS.map((g) => (
-              <button
-                key={g}
-                onClick={() => setGoalThreshold(g)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  goalThreshold === g
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-              >
-                ≥{g}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs">
+          <Target className="h-3 w-3 text-emerald-500" />
+          <span className="text-muted-foreground">Standard:</span>
+          <span className="font-semibold">{goals.rubricGoal}</span>
         </div>
 
         <div className="ml-auto">
-          <ColorLegend goalThreshold={goalThreshold} />
+          <ColorLegend goals={goals} />
         </div>
       </div>
 
       {/* Top row: Percentile bands + Goal attainment */}
       <div className="grid gap-6 lg:grid-cols-2">
         <PercentileMini data={percentiles} />
-        <GoalChart data={goalAttainment} goalThreshold={goalThreshold} />
+        <GoalChart data={goalAttainment} goals={goals} />
       </div>
+
+      {/* Cumulative attainment */}
+      <CumulativeAttainmentChart data={goalAttainment} goals={goals} />
 
       {/* Heatmap */}
       <AnimatePresence mode="wait">
@@ -491,7 +561,7 @@ export function TrendsView({
               <CardDescription>
                 {selectedSkill === "all"
                   ? "Average values per skill across assessment periods. Select a skill above to drill into sub-scores."
-                  : "Average values per sub-score. Color indicates performance level, • marks below-goal values."}
+                  : "Average values per sub-score. Color indicates performance level, • marks below-standard values."}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -499,7 +569,7 @@ export function TrendsView({
                 <HeatmapTable
                   rows={heatmapRows}
                   periods={allPeriods}
-                  goalThreshold={goalThreshold}
+                  goals={goals}
                 />
               ) : (
                 <p className="text-muted-foreground text-sm py-4 text-center">
@@ -551,10 +621,10 @@ export function TrendsView({
                   <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
                   <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={11} />
                   <ReferenceLine
-                    y={goalThreshold}
+                    y={goals.rubricGoal}
                     stroke="hsl(0, 0%, 60%)"
                     strokeDasharray="6 3"
-                    label={{ value: `Goal (${goalThreshold})`, position: "right", fontSize: 10, fill: "hsl(0,0%,50%)" }}
+                    label={{ value: `Standard (${goals.rubricGoal})`, position: "right", fontSize: 10, fill: "hsl(0,0%,50%)" }}
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   {skillNames.map((name) => (

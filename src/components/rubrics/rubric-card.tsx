@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, Pencil, Target, Trash2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -39,9 +39,13 @@ export function RubricCard({ rubric }: { rubric: Rubric }) {
             </Badge>
           ))}
         </div>
-        <p className="text-sm text-muted-foreground mt-3">
-          {rubric.subScores.length} sub-scores selected
-        </p>
+        <div className="flex items-center gap-3 mt-3 text-sm text-muted-foreground">
+          <span>{rubric.subScores.length} sub-scores</span>
+          <span className="flex items-center gap-1">
+            <Target className="h-3.5 w-3.5 text-emerald-500" />
+            Goal: {rubric.goalScore}
+          </span>
+        </div>
       </CardContent>
       <CardFooter className="gap-2">
         <Button variant="outline" size="sm" render={<Link href={`/dashboard/${rubric.id}`} />}>

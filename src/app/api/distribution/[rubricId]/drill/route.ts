@@ -4,6 +4,7 @@ import {
   getDistributionDrillGroup,
   getDistributionDrillPeriod,
 } from "@/lib/queries/steps";
+import { resolveRubricGoals } from "@/lib/queries/rubrics";
 import type { DashboardFilters } from "@/lib/types";
 
 export async function GET(
@@ -27,16 +28,17 @@ export async function GET(
   };
 
   try {
+    const goals = await resolveRubricGoals(rubricId);
     let data;
     switch (scope) {
       case "skill":
-        data = await getDistributionDrillSkill(rubricId, key, filters);
+        data = await getDistributionDrillSkill(rubricId, key, filters, goals);
         break;
       case "group":
-        data = await getDistributionDrillGroup(rubricId, key, filters);
+        data = await getDistributionDrillGroup(rubricId, key, filters, goals);
         break;
       case "period":
-        data = await getDistributionDrillPeriod(rubricId, key, filters);
+        data = await getDistributionDrillPeriod(rubricId, key, filters, goals);
         break;
       default:
         return NextResponse.json({ error: "Invalid scope" }, { status: 400 });

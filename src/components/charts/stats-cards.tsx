@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import type { RubricStats } from "@/lib/types";
-import { Users, BarChart3, Award, Activity } from "lucide-react";
+import { Users, BarChart3, Award, Activity, Target } from "lucide-react";
 
 const container = {
   hidden: {},
@@ -36,28 +36,37 @@ export function StatsCards({ stats }: { stats: RubricStats }) {
       ring: "ring-emerald-500/10",
     },
     {
+      title: "Meeting Standard",
+      value: `${stats.pctMeetingGoal.toFixed(0)}%`,
+      subtitle: `Goal: ${stats.goalScore}`,
+      icon: Target,
+      color: "from-violet-500/10 to-violet-600/5",
+      iconColor: "text-violet-500",
+      ring: "ring-violet-500/10",
+    },
+    {
       title: "90th Pctl",
       value: stats.p90.toFixed(1),
       subtitle: `75th: ${stats.p75.toFixed(1)}`,
       icon: Award,
-      color: "from-violet-500/10 to-violet-600/5",
-      iconColor: "text-violet-500",
-      ring: "ring-violet-500/10",
+      color: "from-amber-500/10 to-amber-600/5",
+      iconColor: "text-amber-500",
+      ring: "ring-amber-500/10",
     },
     {
       title: "Spread",
       value: (stats.p90 - stats.p10).toFixed(1),
       subtitle: `P10: ${stats.p10.toFixed(1)} \u2014 P90: ${stats.p90.toFixed(1)}`,
       icon: Activity,
-      color: "from-amber-500/10 to-amber-600/5",
-      iconColor: "text-amber-500",
-      ring: "ring-amber-500/10",
+      color: "from-rose-500/10 to-rose-600/5",
+      iconColor: "text-rose-500",
+      ring: "ring-rose-500/10",
     },
   ];
 
   return (
     <motion.div
-      className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+      className="grid gap-4 md:grid-cols-3 lg:grid-cols-5"
       variants={container}
       initial="hidden"
       animate="show"

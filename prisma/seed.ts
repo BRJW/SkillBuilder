@@ -426,6 +426,7 @@ async function main() {
     data: {
       name: "Communication Skills",
       description: "Core communication abilities across listening and speaking.",
+      goalScore: 65,
       subScores: { create: commSubScores.map((id) => ({ subScoreId: id })) },
     },
   });
@@ -438,6 +439,7 @@ async function main() {
     data: {
       name: "Leadership & Teamwork",
       description: "Leadership qualities and collaborative team skills.",
+      goalScore: 60,
       subScores: { create: leaderTeamSubScores.map((id) => ({ subScoreId: id })) },
     },
   });
@@ -450,16 +452,29 @@ async function main() {
     data: {
       name: "Creative & Adaptive Thinking",
       description: "Creativity, innovation, and adaptability measures.",
+      goalScore: 55,
       subScores: { create: creativeSubScores.map((id) => ({ subScoreId: id })) },
     },
   });
 
   const fullSubScores = Object.values(skillMap).flatMap((s) => s.subScoreIds.slice(0, 4));
+  // Full Assessment gets per-sub-score goal overrides on a few sub-scores
+  const fullSubScoreGoals: Record<number, number> = {
+    0: 75,  // first sub-score of first skill gets a higher goal
+    3: 60,  // fourth sub-score gets a lower goal
+    8: 80,  // ninth sub-score gets a high goal
+  };
   await prisma.rubric.create({
     data: {
       name: "Full Assessment",
       description: "Comprehensive rubric sampling key sub-scores from every skill area.",
-      subScores: { create: fullSubScores.map((id) => ({ subScoreId: id })) },
+      goalScore: 70,
+      subScores: {
+        create: fullSubScores.map((id, idx) => ({
+          subScoreId: id,
+          ...(fullSubScoreGoals[idx] != null ? { goalScore: fullSubScoreGoals[idx] } : {}),
+        })),
+      },
     },
   });
 
@@ -471,6 +486,7 @@ async function main() {
     data: {
       name: "Planning & Execution",
       description: "Strategic planning, problem-solving, and execution capabilities.",
+      goalScore: 60,
       subScores: { create: planSubScores.map((id) => ({ subScoreId: id })) },
     },
   });

@@ -4,6 +4,12 @@ export interface DashboardFilters {
   dateTo?: string;
 }
 
+export interface RubricGoal {
+  rubricGoal: number;
+  subScoreGoals: Record<string, number>;
+  skillGoals: Record<string, number>;
+}
+
 export interface RubricStats {
   completionRate: number;
   totalPeople: number;
@@ -14,6 +20,8 @@ export interface RubricStats {
   p25: number;
   p75: number;
   p90: number;
+  goalScore: number;
+  pctMeetingGoal: number;
 }
 
 export interface PercentileBandPoint {
@@ -70,16 +78,12 @@ export interface GoalAttainmentRow {
   date: string;
   label: string;
   total: number;
-  above50: number;
-  above60: number;
-  above70: number;
-  above80: number;
-  above90: number;
+  meetingStandard: number;
+  fractionalCounts: { fraction: number; count: number }[];
 }
 
 export interface ScopedDistribution {
   key: string;
-  /** Raw identifier for drill-down lookups (e.g. ISO date for periods) */
   rawKey?: string;
   buckets: DistributionBucket[];
   stats: {
@@ -89,9 +93,7 @@ export interface ScopedDistribution {
     p25: number;
     p75: number;
     count: number;
-    pctAbove50: number;
-    pctAbove60: number;
-    pctAbove70: number;
-    pctAbove80: number;
+    pctMeetingGoal: number;
+    goalThreshold: number;
   };
 }

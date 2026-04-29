@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
-import { getRubricById } from "@/lib/queries/rubrics";
+import { getRubricById, resolveRubricGoals } from "@/lib/queries/rubrics";
 import { getGroups } from "@/lib/queries/groups";
 import {
   getAggregateStats,
@@ -46,6 +46,8 @@ export default async function RubricDashboardPage({
   const rubric = await getRubricById(rubricId);
   if (!rubric) notFound();
 
+  const goals = await resolveRubricGoals(rubricId);
+
   const filters: DashboardFilters = {
     groupIds: sp.group ? [sp.group] : undefined,
     dateFrom: sp.from,
@@ -72,7 +74,7 @@ export default async function RubricDashboardPage({
     distByPeriod,
   ] = await Promise.all([
     getGroups(),
-    getAggregateStats(rubricId, filters),
+    getAggregateStats(rubricId, filters, goals),
     getStepDistribution(rubricId, filters),
     getPercentileBands(rubricId, filters),
     getSubScoreAverages(rubricId, filters),
@@ -84,10 +86,10 @@ export default async function RubricDashboardPage({
     getDistributionTrend(rubricId, filters),
     getSkillPeriodMatrix(rubricId, filters),
     getSubScorePeriodMatrix(rubricId, filters),
-    getGoalAttainment(rubricId, filters),
-    getDistributionBySkill(rubricId, filters),
-    getDistributionByGroup(rubricId, filters),
-    getDistributionByPeriod(rubricId, filters),
+    getGoalAttainment(rubricId, filters, goals),
+    getDistributionBySkill(rubricId, filters, goals),
+    getDistributionByGroup(rubricId, filters, goals),
+    getDistributionByPeriod(rubricId, filters, goals),
   ]);
 
   return (
@@ -124,6 +126,7 @@ export default async function RubricDashboardPage({
 
         <TabsContent value="trends">
           <TrendsView
+            goals={goals}
             percentiles={percentiles}
             skillMatrix={skillMatrix}
             subScoreMatrix={subScoreMatrix}
@@ -134,6 +137,7 @@ export default async function RubricDashboardPage({
         <TabsContent value="distribution">
           <DistributionView
             rubricId={rubricId}
+            goals={goals}
             overall={distribution}
             distributionTrend={distributionTrend}
             bySkill={distBySkill}

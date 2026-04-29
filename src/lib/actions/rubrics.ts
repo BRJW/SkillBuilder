@@ -8,17 +8,24 @@ export async function createRubric(formData: FormData) {
   const name = formData.get("name") as string;
   const description = (formData.get("description") as string) || null;
   const subScoreIds = formData.getAll("subScoreIds") as string[];
+  const goalScore = parseFloat(formData.get("goalScore") as string) || 70;
+  const subScoreGoalsRaw = formData.get("subScoreGoals") as string;
+  const subScoreGoals: Record<string, number> = subScoreGoalsRaw ? JSON.parse(subScoreGoalsRaw) : {};
 
   if (!name || subScoreIds.length === 0) {
     throw new Error("Name and at least one sub-score are required");
   }
 
-  const rubric = await prisma.rubric.create({
+  await prisma.rubric.create({
     data: {
       name,
       description,
+      goalScore,
       subScores: {
-        create: subScoreIds.map((subScoreId) => ({ subScoreId })),
+        create: subScoreIds.map((subScoreId) => ({
+          subScoreId,
+          goalScore: subScoreGoals[subScoreId] != null ? subScoreGoals[subScoreId] : null,
+        })),
       },
     },
   });
@@ -31,6 +38,9 @@ export async function updateRubric(rubricId: string, formData: FormData) {
   const name = formData.get("name") as string;
   const description = (formData.get("description") as string) || null;
   const subScoreIds = formData.getAll("subScoreIds") as string[];
+  const goalScore = parseFloat(formData.get("goalScore") as string) || 70;
+  const subScoreGoalsRaw = formData.get("subScoreGoals") as string;
+  const subScoreGoals: Record<string, number> = subScoreGoalsRaw ? JSON.parse(subScoreGoalsRaw) : {};
 
   if (!name || subScoreIds.length === 0) {
     throw new Error("Name and at least one sub-score are required");
@@ -43,8 +53,12 @@ export async function updateRubric(rubricId: string, formData: FormData) {
       data: {
         name,
         description,
+        goalScore,
         subScores: {
-          create: subScoreIds.map((subScoreId) => ({ subScoreId })),
+          create: subScoreIds.map((subScoreId) => ({
+            subScoreId,
+            goalScore: subScoreGoals[subScoreId] != null ? subScoreGoals[subScoreId] : null,
+          })),
         },
       },
     }),

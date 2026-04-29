@@ -37,6 +37,12 @@ export default async function EditRubricPage({
           name: rubric.name,
           description: rubric.description,
           selectedSubScoreIds: rubric.subScores.map((rs) => rs.subScoreId),
+          goalScore: rubric.goalScore,
+          subScoreGoals: Object.fromEntries(
+            rubric.subScores
+              .filter((rs) => rs.goalScore != null)
+              .map((rs) => [rs.subScoreId, rs.goalScore!])
+          ),
         }}
       />
     </div>
