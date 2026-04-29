@@ -502,7 +502,7 @@ export function SkillsView({
           >
             {/* Overall radar + Per-skill radar cards */}
             <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
-              <SkillRadarPopulation data={skillAvgs} trends={skillTrends} />
+              <SkillRadarPopulation data={skillAvgs} trends={skillTrends} subScoreAvgs={subScoreAvgs} />
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Per-Skill Profiles</h3>
                 <SkillCards

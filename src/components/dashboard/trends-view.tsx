@@ -21,14 +21,6 @@ import {
 } from "@/components/ui/chart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TrendingUp, TrendingDown, Minus, Target } from "lucide-react";
 import { SKILL_COLORS } from "@/lib/constants";
 import type { SkillName } from "@/lib/constants";
@@ -507,21 +499,23 @@ export function TrendsView({
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-muted-foreground">Scope:</span>
-          <Select value={selectedSkill} onValueChange={(v) => setSelectedSkill(v ?? "all")}>
-            <SelectTrigger className="w-[200px] h-9">
-              <SelectValue>
-                {selectedSkill === "all" ? "All Skills" : selectedSkill}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Skills (overview)</SelectItem>
-              {skillNames.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name} (sub-scores)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex rounded-lg border overflow-hidden">
+            <button
+              onClick={() => setSelectedSkill("all")}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${selectedSkill === "all" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            >
+              All Skills
+            </button>
+            {skillNames.map((name) => (
+              <button
+                key={name}
+                onClick={() => setSelectedSkill(name)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${selectedSkill === name ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              >
+                {name.replace("Planning & Problem-Solving", "Planning")}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs">

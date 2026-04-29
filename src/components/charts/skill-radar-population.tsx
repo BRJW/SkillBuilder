@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SKILL_COLORS } from "@/lib/constants";
 import type { SkillName } from "@/lib/constants";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import type { SubScoreAverage } from "@/lib/types";
 
 const chartConfig = {
   average: {
@@ -28,18 +29,36 @@ const chartConfig = {
 export function SkillRadarPopulation({
   data,
   trends,
+  subScoreAvgs,
 }: {
   data: { skillName: string; average: number }[];
   trends?: { skillName: string; change: number }[];
+  subScoreAvgs?: SubScoreAverage[];
 }) {
   const trendMap = new Map(trends?.map((t) => [t.skillName, t.change]) ?? []);
 
-  const radarData = data.map((d) => ({
-    skill: d.skillName.replace("Planning & Problem-Solving", "Planning"),
-    average: d.average,
-    fullMark: 100,
-    fill: SKILL_COLORS[d.skillName as SkillName] || "hsl(210, 60%, 55%)",
-  }));
+  // If fewer than 3 skills, show sub-scores on the radar instead
+  const useSubScores = data.length < 3 && subScoreAvgs && subScoreAvgs.length >= 3;
+
+  const radarData = useSubScores
+    ? subScoreAvgs!.map((ss) => ({
+        skill: ss.subScoreName.length > 14 ? ss.subScoreName.slice(0, 12) + "…" : ss.subScoreName,
+        fullName: ss.subScoreName,
+        average: ss.average,
+        fullMark: 100,
+        fill: SKILL_COLORS[ss.skillName as SkillName] || "hsl(210, 60%, 55%)",
+      }))
+    : data.map((d) => ({
+        skill: d.skillName.replace("Planning & Problem-Solving", "Planning"),
+        fullName: d.skillName,
+        average: d.average,
+        fullMark: 100,
+        fill: SKILL_COLORS[d.skillName as SkillName] || "hsl(210, 60%, 55%)",
+      }));
+
+  const description = useSubScores
+    ? `Sub-score averages (${data.length} skill${data.length !== 1 ? "s" : ""}, ${subScoreAvgs!.length} sub-scores)`
+    : "Population averages across skill areas";
 
   return (
     <motion.div
@@ -50,9 +69,7 @@ export function SkillRadarPopulation({
       <Card>
         <CardHeader>
           <CardTitle>Skill Profile</CardTitle>
-          <CardDescription>
-            Population averages across skill areas
-          </CardDescription>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <ChartContainer config={chartConfig} className="h-[280px] w-full">
@@ -66,7 +83,7 @@ export function SkillRadarPopulation({
               <PolarGrid stroke="hsl(0, 0%, 80%)" strokeDasharray="3 3" />
               <PolarAngleAxis
                 dataKey="skill"
-                tick={{ fontSize: 11, fill: "hsl(0, 0%, 45%)" }}
+                tick={{ fontSize: useSubScores ? 9 : 11, fill: "hsl(0, 0%, 45%)" }}
               />
               <PolarRadiusAxis
                 domain={[0, 100]}
@@ -74,7 +91,7 @@ export function SkillRadarPopulation({
                 axisLine={false}
                 tickCount={5}
               />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value, _name, item) => <span>{item.payload.fullName}: {Number(value).toFixed(1)}</span>} />} />
               <Radar
                 name="Average"
                 dataKey="average"

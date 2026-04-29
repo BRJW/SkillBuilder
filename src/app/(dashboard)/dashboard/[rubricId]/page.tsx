@@ -120,7 +120,7 @@ export default async function RubricDashboardPage({
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <SkillRadarPopulation data={skillAvgs} trends={skillTrends} />
+            <SkillRadarPopulation data={skillAvgs} trends={skillTrends} subScoreAvgs={subScoreAvgs} />
             <TopBottomChart top={topBottom.top} bottom={topBottom.bottom} />
           </div>
           <SubScoreBarChart data={subScoreAvgs} />
