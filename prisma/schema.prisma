@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -20,4 +14,88 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  district  String?
+  people    Person[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Person {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  scores    Score[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model Skill {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  sortOrder Int        @default(0)
+  subScores SubScore[]
+  createdAt DateTime   @default(now())
+}
+
+model SubScore {
+  id              String           @id @default(cuid())
+  name            String
+  skillId         String
+  skill           Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  sortOrder       Int              @default(0)
+  scores          Score[]
+  rubricSubScores RubricSubScore[]
+  createdAt       DateTime         @default(now())
+
+  @@unique([skillId, name])
+  @@index([skillId])
+}
+
+model Score {
+  id         String   @id @default(cuid())
+  value      Int
+  personId   String
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  subScoreId String
+  subScore   SubScore @relation(fields: [subScoreId], references: [id], onDelete: Cascade)
+  assessedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([personId, subScoreId, assessedAt])
+  @@index([personId])
+  @@index([subScoreId])
+  @@index([assessedAt])
+  @@index([personId, assessedAt])
+}
+
+model Rubric {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  subScores   RubricSubScore[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model RubricSubScore {
+  id         String   @id @default(cuid())
+  rubricId   String
+  rubric     Rubric   @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  subScoreId String
+  subScore   SubScore @relation(fields: [subScoreId], references: [id], onDelete: Cascade)
+  weight     Float    @default(1.0)
+
+  @@unique([rubricId, subScoreId])
+  @@index([rubricId])
+  @@index([subScoreId])
 }
