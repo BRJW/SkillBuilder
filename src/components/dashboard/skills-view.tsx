@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -40,6 +40,7 @@ import type {
   RubricGoal,
   ScopedDistribution,
   SubScoreAverage,
+  SubScoreStats,
   SkillPeriodRow,
   SubScorePeriodRow,
 } from "@/lib/types";
@@ -144,6 +145,198 @@ function SkillSubScoreRadar({
         />
       </RadarChart>
     </ChartContainer>
+  );
+}
+
+// Overlay config for the enhanced radar
+type OverlayKey = "goal" | "min" | "max" | "median" | "p5" | "p95";
+
+const OVERLAY_CONFIG: Record<OverlayKey, { label: string; stroke: string; dasharray: string; width: number }> = {
+  goal:   { label: "Goal",   stroke: "hsl(152, 60%, 48%)", dasharray: "6 3",  width: 2 },
+  median: { label: "Median", stroke: "hsl(270, 50%, 55%)", dasharray: "",     width: 1.5 },
+  min:    { label: "Min",    stroke: "hsl(0, 65%, 55%)",   dasharray: "3 3",  width: 1 },
+  max:    { label: "Max",    stroke: "hsl(210, 65%, 55%)",  dasharray: "3 3",  width: 1 },
+  p5:     { label: "P5",     stroke: "hsl(30, 70%, 55%)",  dasharray: "2 2",  width: 1 },
+  p95:    { label: "P95",    stroke: "hsl(180, 55%, 45%)", dasharray: "2 2",  width: 1 },
+};
+
+function EnhancedSkillRadar({
+  subScores,
+  stats,
+  color,
+  size = 350,
+}: {
+  subScores: SubScoreAverage[];
+  stats: SubScoreStats[] | null;
+  color: string;
+  size?: number;
+}) {
+  const [overlays, setOverlays] = useState<Set<OverlayKey>>(new Set());
+
+  if (subScores.length < 3) return null;
+
+  const statsMap = new Map(stats?.map((s) => [s.subScoreName, s]) ?? []);
+
+  const radarData = subScores.map((ss) => {
+    const st = statsMap.get(ss.subScoreName);
+    return {
+      name: ss.subScoreName.length > 14 ? ss.subScoreName.slice(0, 12) + "…" : ss.subScoreName,
+      fullName: ss.subScoreName,
+      value: ss.average,
+      fullMark: 100,
+      goal: st?.goal ?? 0,
+      min: st?.min ?? 0,
+      max: st?.max ?? 0,
+      median: st?.median ?? 0,
+      p5: st?.p5 ?? 0,
+      p95: st?.p95 ?? 0,
+    };
+  });
+
+  const toggleOverlay = (key: OverlayKey) => {
+    setOverlays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const gradientId = `radarFill-enhanced-${color.replace(/[^a-z0-9]/gi, "")}`;
+
+  const config: Record<string, { label: string; color: string }> = {
+    value: { label: "Average", color },
+    ...Object.fromEntries(
+      (Object.keys(OVERLAY_CONFIG) as OverlayKey[]).map((k) => [
+        k,
+        { label: OVERLAY_CONFIG[k].label, color: OVERLAY_CONFIG[k].stroke },
+      ])
+    ),
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Sub-Score Profile</CardTitle>
+        <CardDescription>
+          Toggle statistical overlays on the radar
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Toggle buttons */}
+        <div className="flex flex-wrap gap-1.5">
+          {(Object.keys(OVERLAY_CONFIG) as OverlayKey[]).map((key) => {
+            const cfg = OVERLAY_CONFIG[key];
+            const active = overlays.has(key);
+            return (
+              <button
+                key={key}
+                onClick={() => toggleOverlay(key)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                  active
+                    ? "border-transparent text-white shadow-sm"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                }`}
+                style={active ? { backgroundColor: cfg.stroke } : undefined}
+                disabled={!stats}
+              >
+                {cfg.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Radar chart */}
+        <ChartContainer config={config} className="w-full" style={{ height: size }}>
+          <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="68%">
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={color} stopOpacity={0.08} />
+              </linearGradient>
+            </defs>
+            <PolarGrid stroke="hsl(0, 0%, 80%)" strokeDasharray="3 3" />
+            <PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(0, 0%, 45%)" }} />
+            <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 9 }} axisLine={false} tickCount={5} />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value, name, item) => {
+                    const p = item.payload;
+                    if (name === "Average") {
+                      const parts = [`${p.fullName}: ${Number(value).toFixed(1)}`];
+                      if (stats) {
+                        const st = statsMap.get(p.fullName);
+                        if (st) {
+                          parts.push(`Goal: ${st.goal} | Min: ${st.min} | Max: ${st.max}`);
+                          parts.push(`Median: ${st.median} | P5: ${st.p5} | P95: ${st.p95}`);
+                        }
+                      }
+                      return <span className="whitespace-pre-line">{parts.join("\n")}</span>;
+                    }
+                    return <span>{String(name)}: {Number(value).toFixed(1)}</span>;
+                  }}
+                />
+              }
+            />
+
+            {/* Overlay radars (rendered below main so main is on top) */}
+            {(Object.keys(OVERLAY_CONFIG) as OverlayKey[]).map((key) => {
+              if (!overlays.has(key)) return null;
+              const cfg = OVERLAY_CONFIG[key];
+              return (
+                <Radar
+                  key={key}
+                  name={cfg.label}
+                  dataKey={key}
+                  stroke={cfg.stroke}
+                  strokeWidth={cfg.width}
+                  strokeDasharray={cfg.dasharray || undefined}
+                  fill="none"
+                  dot={false}
+                />
+              );
+            })}
+
+            {/* Main average radar (on top) */}
+            <Radar
+              name="Average"
+              dataKey="value"
+              stroke={color}
+              strokeWidth={2.5}
+              fill={`url(#${gradientId})`}
+              dot={{ r: 4, fill: color, strokeWidth: 0 }}
+            />
+          </RadarChart>
+        </ChartContainer>
+
+        {/* Legend for active overlays */}
+        {overlays.size > 0 && (
+          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5 rounded" style={{ backgroundColor: color }} />
+              <span>Average</span>
+            </div>
+            {(Object.keys(OVERLAY_CONFIG) as OverlayKey[]).map((key) => {
+              if (!overlays.has(key)) return null;
+              const cfg = OVERLAY_CONFIG[key];
+              return (
+                <div key={key} className="flex items-center gap-1.5">
+                  <div
+                    className="w-4 h-0.5 rounded"
+                    style={{
+                      backgroundColor: cfg.stroke,
+                      borderTop: cfg.dasharray ? `1px dashed ${cfg.stroke}` : undefined,
+                    }}
+                  />
+                  <span>{cfg.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -428,25 +621,43 @@ export function SkillsView({
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [drillData, setDrillData] = useState<ScopedDistribution[] | null>(null);
   const [drillLoading, setDrillLoading] = useState(false);
+  const [statsData, setStatsData] = useState<SubScoreStats[] | null>(null);
   const searchParams = useSearchParams();
 
   const fetchDrill = useCallback(async (skillName: string) => {
     setDrillLoading(true);
     setDrillData(null);
-    const qp = new URLSearchParams();
-    qp.set("scope", "skill");
-    qp.set("key", skillName);
+    setStatsData(null);
     const group = searchParams.get("group");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+
+    const qp = new URLSearchParams();
+    qp.set("scope", "skill");
+    qp.set("key", skillName);
     if (group) qp.set("group", group);
     if (from) qp.set("from", from);
     if (to) qp.set("to", to);
+
+    const sqp = new URLSearchParams();
+    sqp.set("skill", skillName);
+    if (group) sqp.set("group", group);
+    if (from) sqp.set("from", from);
+    if (to) sqp.set("to", to);
+
     try {
-      const res = await fetch(`/api/distribution/${rubricId}/drill?${qp.toString()}`);
-      if (!res.ok) throw new Error("fetch failed");
-      const data: ScopedDistribution[] = await res.json();
-      setDrillData(data);
+      const [drillRes, statsRes] = await Promise.all([
+        fetch(`/api/distribution/${rubricId}/drill?${qp.toString()}`),
+        fetch(`/api/distribution/${rubricId}/sub-score-stats?${sqp.toString()}`),
+      ]);
+      if (drillRes.ok) {
+        setDrillData(await drillRes.json());
+      } else {
+        setDrillData([]);
+      }
+      if (statsRes.ok) {
+        setStatsData(await statsRes.json());
+      }
     } catch {
       setDrillData([]);
     } finally {
@@ -462,6 +673,7 @@ export function SkillsView({
   const handleBack = useCallback(() => {
     setSelectedSkill(null);
     setDrillData(null);
+    setStatsData(null);
   }, []);
 
   // Data for the selected skill
@@ -616,17 +828,14 @@ export function SkillsView({
               </CardContent>
             </Card>
 
-            {/* Large radar for the selected skill */}
+            {/* Large radar with statistical overlays */}
             {selectedSubScores.length >= 3 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Sub-Score Profile</CardTitle>
-                  <CardDescription>Radar view of {selectedSubScores.length} sub-scores within {selectedSkill}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <SkillSubScoreRadar subScores={selectedSubScores} color={selectedColor} size={350} />
-                </CardContent>
-              </Card>
+              <EnhancedSkillRadar
+                subScores={selectedSubScores}
+                stats={statsData}
+                color={selectedColor}
+                size={350}
+              />
             )}
 
             {/* Sub-score distributions */}

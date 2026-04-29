@@ -82,6 +82,19 @@ export interface GoalAttainmentRow {
   fractionalCounts: { fraction: number; count: number }[];
 }
 
+export interface SubScoreStats {
+  subScoreId: string;
+  subScoreName: string;
+  skillName: string;
+  min: number;
+  max: number;
+  average: number;
+  median: number;
+  p5: number;
+  p95: number;
+  goal: number;
+}
+
 export interface ScopedDistribution {
   key: string;
   rawKey?: string;

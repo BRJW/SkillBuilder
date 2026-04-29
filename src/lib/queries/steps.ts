@@ -6,6 +6,7 @@ import type {
   PercentileBandPoint,
   DistributionBucket,
   SubScoreAverage,
+  SubScoreStats,
   SkillPeriodRow,
   SubScorePeriodRow,
   GoalAttainmentRow,
@@ -851,4 +852,61 @@ export async function getDistributionDrillPeriod(
       return { key: skillName, buckets: computeBuckets(avgs), stats: computeStatsFromAvgs(avgs, goal) };
     })
     .sort((a, b) => b.stats.mean - a.stats.mean);
+}
+
+// --- Sub-score statistical overlays ---
+
+export async function getSubScoreStatsForSkill(
+  rubricId: string,
+  skillName: string,
+  filters: DashboardFilters,
+  goals: RubricGoal
+): Promise<SubScoreStats[]> {
+  const where = buildWhereClause(rubricId, filters);
+
+  const result = await prisma.$queryRawUnsafe<
+    {
+      sub_score_id: string;
+      sub_score_name: string;
+      skill_name: string;
+      min_val: number;
+      max_val: number;
+      avg_val: number;
+      median_val: number;
+      p5_val: number;
+      p95_val: number;
+    }[]
+  >(`
+    SELECT
+      ss.id as sub_score_id,
+      ss.name as sub_score_name,
+      sk.name as skill_name,
+      MIN(s.value) as min_val,
+      MAX(s.value) as max_val,
+      AVG(s.value) as avg_val,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY s.value) as median_val,
+      PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY s.value) as p5_val,
+      PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY s.value) as p95_val
+    FROM "Step" s
+    JOIN "RubricSubScore" rs ON s."subScoreId" = rs."subScoreId"
+    JOIN "SubScore" ss ON s."subScoreId" = ss.id
+    JOIN "Skill" sk ON ss."skillId" = sk.id
+    JOIN "Person" p ON s."personId" = p.id
+    WHERE ${where} AND sk.name = '${skillName.replace(/'/g, "''")}'
+    GROUP BY ss.id, ss.name, sk.name
+    ORDER BY ss.name
+  `);
+
+  return result.map((row) => ({
+    subScoreId: row.sub_score_id,
+    subScoreName: row.sub_score_name,
+    skillName: row.skill_name,
+    min: r1(row.min_val),
+    max: r1(row.max_val),
+    average: r1(row.avg_val),
+    median: r1(row.median_val),
+    p5: r1(row.p5_val),
+    p95: r1(row.p95_val),
+    goal: r1(goals.subScoreGoals[row.sub_score_id] ?? goals.skillGoals[skillName] ?? goals.rubricGoal),
+  }));
 }
