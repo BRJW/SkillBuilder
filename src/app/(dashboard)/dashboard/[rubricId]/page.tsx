@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import { getRubricById, resolveRubricGoals } from "@/lib/queries/rubrics";
-import { getGroups } from "@/lib/queries/groups";
+import { getGroupsForRubric } from "@/lib/queries/groups";
 import {
   getAggregateStats,
   getStepDistribution,
@@ -31,6 +31,7 @@ import { GroupComparisonChart } from "@/components/charts/group-comparison-chart
 import { TopBottomChart } from "@/components/charts/top-bottom-chart";
 import { PersonTable } from "@/components/people/person-table";
 import { TrendsView } from "@/components/dashboard/trends-view";
+import { SkillsView } from "@/components/dashboard/skills-view";
 import type { DashboardFilters } from "@/lib/types";
 
 export default async function RubricDashboardPage({
@@ -73,7 +74,7 @@ export default async function RubricDashboardPage({
     distByGroup,
     distByPeriod,
   ] = await Promise.all([
-    getGroups(),
+    getGroupsForRubric(rubricId),
     getAggregateStats(rubricId, filters, goals),
     getStepDistribution(rubricId, filters),
     getPercentileBands(rubricId, filters),
@@ -110,6 +111,7 @@ export default async function RubricDashboardPage({
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
           <TabsTrigger value="distribution">Distribution</TabsTrigger>
           <TabsTrigger value="groups">Groups</TabsTrigger>
@@ -122,6 +124,19 @@ export default async function RubricDashboardPage({
             <TopBottomChart top={topBottom.top} bottom={topBottom.bottom} />
           </div>
           <SubScoreBarChart data={subScoreAvgs} />
+        </TabsContent>
+
+        <TabsContent value="skills">
+          <SkillsView
+            rubricId={rubricId}
+            goals={goals}
+            skillAvgs={skillAvgs}
+            skillTrends={skillTrends}
+            subScoreAvgs={subScoreAvgs}
+            bySkill={distBySkill}
+            skillMatrix={skillMatrix}
+            subScoreMatrix={subScoreMatrix}
+          />
         </TabsContent>
 
         <TabsContent value="trends">

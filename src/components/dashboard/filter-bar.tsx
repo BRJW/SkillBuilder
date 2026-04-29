@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 interface Group {
@@ -24,6 +25,8 @@ export function FilterBar({ groups }: { groups: Group[] }) {
 
   const currentGroupId = searchParams.get("group") || "all";
   const currentGroup = groups.find((g) => g.id === currentGroupId);
+  const currentFrom = searchParams.get("from") || "";
+  const currentTo = searchParams.get("to") || "";
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -61,6 +64,40 @@ export function FilterBar({ groups }: { groups: Group[] }) {
           </SelectContent>
         </Select>
       </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">From</Label>
+        <Input
+          type="date"
+          value={currentFrom}
+          onChange={(e) => updateParam("from", e.target.value)}
+          className="w-[160px] h-9"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">To</Label>
+        <Input
+          type="date"
+          value={currentTo}
+          onChange={(e) => updateParam("to", e.target.value)}
+          className="w-[160px] h-9"
+        />
+      </div>
+
+      {(currentFrom || currentTo) && (
+        <button
+          onClick={() => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.delete("from");
+            params.delete("to");
+            router.push(`${pathname}?${params.toString()}`);
+          }}
+          className="text-xs text-muted-foreground hover:text-foreground underline pb-2"
+        >
+          Clear dates
+        </button>
+      )}
     </div>
   );
 }
